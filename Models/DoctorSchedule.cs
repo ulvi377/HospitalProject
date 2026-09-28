@@ -6,7 +6,7 @@ public class DoctorSchedule
 
     public int DoctorId { get; set; }
 
-    public Doctor Doctor { get; set; } = null!;
+    public Doctor? Doctor { get; set; }
 
     public DayOfWeek DayOfWeek { get; set; }
 

@@ -30,12 +30,14 @@ public class DoctorsController : ControllerBase
                 d.PhoneNumber,
                 d.ImageUrl,
                 d.SpecialtyId,
-                Specialty = d.Specialty == null ? null : new
-                {
-                    d.Specialty.Id,
-                    d.Specialty.Name,
-                    d.Specialty.Description
-                },
+                Specialty = d.Specialty == null
+                    ? null
+                    : new
+                    {
+                        d.Specialty.Id,
+                        d.Specialty.Name,
+                        d.Specialty.Description
+                    },
                 d.IsActive
             })
             .ToListAsync();
@@ -58,12 +60,14 @@ public class DoctorsController : ControllerBase
                 d.PhoneNumber,
                 d.ImageUrl,
                 d.SpecialtyId,
-                Specialty = d.Specialty == null ? null : new
-                {
-                    d.Specialty.Id,
-                    d.Specialty.Name,
-                    d.Specialty.Description
-                },
+                Specialty = d.Specialty == null
+                    ? null
+                    : new
+                    {
+                        d.Specialty.Id,
+                        d.Specialty.Name,
+                        d.Specialty.Description
+                    },
                 d.IsActive
             })
             .FirstOrDefaultAsync();
@@ -95,6 +99,7 @@ public class DoctorsController : ControllerBase
         }
 
         _context.Doctors.Add(doctor);
+
         await _context.SaveChangesAsync();
 
         return CreatedAtAction(
@@ -118,7 +123,8 @@ public class DoctorsController : ControllerBase
             });
         }
 
-        var existingDoctor = await _context.Doctors.FindAsync(id);
+        var existingDoctor = await _context.Doctors
+            .FindAsync(id);
 
         if (existingDoctor == null)
         {
@@ -155,7 +161,8 @@ public class DoctorsController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteDoctor(int id)
     {
-        var doctor = await _context.Doctors.FindAsync(id);
+        var doctor = await _context.Doctors
+            .FindAsync(id);
 
         if (doctor == null)
         {
@@ -166,6 +173,7 @@ public class DoctorsController : ControllerBase
         }
 
         _context.Doctors.Remove(doctor);
+
         await _context.SaveChangesAsync();
 
         return NoContent();
