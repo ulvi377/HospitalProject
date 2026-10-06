@@ -1,5 +1,7 @@
+using System.Security.Claims;
 using Hospital.Data;
 using Hospital.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,10 +19,27 @@ public class PatientController : ControllerBase
     }
 
     // GET: api/patient
+    // Admin -> butun patientler
+    // Patient -> yalniz oz profili
+    [Authorize(Roles = "Admin,Patient")]
     [HttpGet]
     public async Task<IActionResult> GetPatients()
     {
-        var patients = await _context.Patients
+        var currentUserId = User.FindFirstValue(
+            ClaimTypes.NameIdentifier);
+
+        var isAdmin = User.IsInRole("Admin");
+
+        var query = _context.Patients
+            .AsQueryable();
+
+        if (!isAdmin)
+        {
+            query = query.Where(p =>
+                p.UserId == currentUserId);
+        }
+
+        var patients = await query
             .Select(p => new
             {
                 p.Id,
@@ -37,11 +56,27 @@ public class PatientController : ControllerBase
     }
 
     // GET: api/patient/1
+    // Admin -> istediyi patient
+    // Patient -> yalniz oz profili
+    [Authorize(Roles = "Admin,Patient")]
     [HttpGet("{id}")]
     public async Task<IActionResult> GetPatient(int id)
     {
-        var patient = await _context.Patients
-            .Where(p => p.Id == id)
+        var currentUserId = User.FindFirstValue(
+            ClaimTypes.NameIdentifier);
+
+        var isAdmin = User.IsInRole("Admin");
+
+        var query = _context.Patients
+            .Where(p => p.Id == id);
+
+        if (!isAdmin)
+        {
+            query = query.Where(p =>
+                p.UserId == currentUserId);
+        }
+
+        var patient = await query
             .Select(p => new
             {
                 p.Id,
@@ -66,8 +101,11 @@ public class PatientController : ControllerBase
     }
 
     // POST: api/patient
+    // Admin + Patient
+    [Authorize(Roles = "Admin,Patient")]
     [HttpPost]
-    public async Task<IActionResult> CreatePatient(Patient patient)
+    public async Task<IActionResult> CreatePatient(
+        Patient patient)
     {
         if (string.IsNullOrWhiteSpace(patient.FullName))
         {
@@ -81,8 +119,43 @@ public class PatientController : ControllerBase
         {
             return BadRequest(new
             {
-                message = "Dogum tarixi gelecek tarix ola bilmez."
+                message =
+                    "Dogum tarixi gelecek tarix ola bilmez."
             });
+        }
+
+        var currentUserId = User.FindFirstValue(
+            ClaimTypes.NameIdentifier);
+
+        var isAdmin = User.IsInRole("Admin");
+
+        // Patient ucun UserId JWT-den goturulur.
+        if (!isAdmin)
+        {
+            patient.UserId = currentUserId;
+        }
+
+        // Patient basqa UserId gondere bilmez.
+        if (!isAdmin &&
+            patient.UserId != currentUserId)
+        {
+            return Forbid();
+        }
+
+        // Eyni user ucun ikinci Patient profili yaratilmasin.
+        if (!string.IsNullOrWhiteSpace(patient.UserId))
+        {
+            var existingPatient = await _context.Patients
+                .AnyAsync(p => p.UserId == patient.UserId);
+
+            if (existingPatient)
+            {
+                return BadRequest(new
+                {
+                    message =
+                        "Bu istifadeci ucun artiq Patient profili movcuddur."
+                });
+            }
         }
 
         _context.Patients.Add(patient);
@@ -106,6 +179,9 @@ public class PatientController : ControllerBase
     }
 
     // PUT: api/patient/1
+    // Admin -> istediyi patient
+    // Patient -> yalniz oz profili
+    [Authorize(Roles = "Admin,Patient")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdatePatient(
         int id,
@@ -130,11 +206,24 @@ public class PatientController : ControllerBase
             });
         }
 
+        var currentUserId = User.FindFirstValue(
+            ClaimTypes.NameIdentifier);
+
+        var isAdmin = User.IsInRole("Admin");
+
+        // Patient yalniz oz profilini deyise biler.
+        if (!isAdmin &&
+            existingPatient.UserId != currentUserId)
+        {
+            return Forbid();
+        }
+
         if (string.IsNullOrWhiteSpace(patient.FullName))
         {
             return BadRequest(new
             {
-                message = "Pasiyentin adi bos ola bilmez."
+                message =
+                    "Pasiyentin adi bos ola bilmez."
             });
         }
 
@@ -142,7 +231,8 @@ public class PatientController : ControllerBase
         {
             return BadRequest(new
             {
-                message = "Dogum tarixi gelecek tarix ola bilmez."
+                message =
+                    "Dogum tarixi gelecek tarix ola bilmez."
             });
         }
 
@@ -151,7 +241,12 @@ public class PatientController : ControllerBase
         existingPatient.Gender = patient.Gender;
         existingPatient.PhoneNumber = patient.PhoneNumber;
         existingPatient.Address = patient.Address;
-        existingPatient.UserId = patient.UserId;
+
+        // UserId-ni yalniz Admin deyise biler.
+        if (isAdmin)
+        {
+            existingPatient.UserId = patient.UserId;
+        }
 
         await _context.SaveChangesAsync();
 
@@ -159,6 +254,8 @@ public class PatientController : ControllerBase
     }
 
     // DELETE: api/patient/1
+    // Yalniz Admin
+    [Authorize(Roles = "Admin")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeletePatient(int id)
     {

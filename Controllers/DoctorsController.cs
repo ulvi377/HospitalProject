@@ -1,5 +1,7 @@
 using Hospital.Data;
+using Hospital.Interfaces;
 using Hospital.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,21 +9,63 @@ namespace Hospital.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = "Admin,Doctor")]
 public class DoctorsController : ControllerBase
 {
     private readonly HospitalDbContext _context;
+    private readonly ICloudinaryService _cloudinaryService;
 
-    public DoctorsController(HospitalDbContext context)
+    public DoctorsController(
+        HospitalDbContext context,
+        ICloudinaryService cloudinaryService)
     {
         _context = context;
+        _cloudinaryService = cloudinaryService;
     }
 
     // GET: api/doctors
+    // Admin + Doctor
     [HttpGet]
-    public async Task<IActionResult> GetDoctors()
+    public async Task<IActionResult> GetDoctors(
+        [FromQuery] string? search,
+        [FromQuery] string? specialty,
+        [FromQuery] bool? isActive)
     {
-        var doctors = await _context.Doctors
+        var query = _context.Doctors
             .Include(d => d.Specialty)
+            .AsQueryable();
+
+        // Search
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            search = search.Trim();
+
+            query = query.Where(d =>
+                d.FullName.Contains(search) ||
+                d.Email.Contains(search) ||
+                d.PhoneNumber.Contains(search) ||
+                (d.Specialty != null &&
+                 d.Specialty.Name.Contains(search)));
+        }
+
+        // Specialty filter
+        if (!string.IsNullOrWhiteSpace(specialty))
+        {
+            specialty = specialty.Trim();
+
+            query = query.Where(d =>
+                d.Specialty != null &&
+                d.Specialty.Name.Contains(specialty));
+        }
+
+        // Active status filter
+        if (isActive.HasValue)
+        {
+            query = query.Where(d =>
+                d.IsActive == isActive.Value);
+        }
+
+        var doctors = await query
             .Select(d => new
             {
                 d.Id,
@@ -46,6 +90,7 @@ public class DoctorsController : ControllerBase
     }
 
     // GET: api/doctors/1
+    // Admin + Doctor
     [HttpGet("{id}")]
     public async Task<IActionResult> GetDoctor(int id)
     {
@@ -84,8 +129,11 @@ public class DoctorsController : ControllerBase
     }
 
     // POST: api/doctors
+    // Yalniz Admin
+    [Authorize(Roles = "Admin")]
     [HttpPost]
-    public async Task<ActionResult<Doctor>> CreateDoctor(Doctor doctor)
+    public async Task<ActionResult<Doctor>> CreateDoctor(
+        Doctor doctor)
     {
         var specialtyExists = await _context.Specialties
             .AnyAsync(s => s.Id == doctor.SpecialtyId);
@@ -105,11 +153,12 @@ public class DoctorsController : ControllerBase
         return CreatedAtAction(
             nameof(GetDoctor),
             new { id = doctor.Id },
-            doctor
-        );
+            doctor);
     }
 
     // PUT: api/doctors/1
+    // Yalniz Admin
+    [Authorize(Roles = "Admin")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateDoctor(
         int id,
@@ -157,7 +206,95 @@ public class DoctorsController : ControllerBase
         return NoContent();
     }
 
+    // POST: api/doctors/{id}/image
+    // Yalniz Admin
+    [Authorize(Roles = "Admin")]
+    [HttpPost("{id}/image")]
+    public async Task<IActionResult> UploadDoctorImage(
+        int id,
+        IFormFile file)
+    {
+        var doctor = await _context.Doctors
+            .FirstOrDefaultAsync(d => d.Id == id);
+
+        if (doctor == null)
+        {
+            return NotFound(new
+            {
+                message = "Hekim tapilmadi."
+            });
+        }
+
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest(new
+            {
+                message = "Sekil fayli secilmelidir."
+            });
+        }
+
+        var allowedExtensions = new[]
+        {
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".webp"
+        };
+
+        var extension = Path
+            .GetExtension(file.FileName)
+            .ToLowerInvariant();
+
+        if (!allowedExtensions.Contains(extension))
+        {
+            return BadRequest(new
+            {
+                message =
+                    "Yalniz JPG, JPEG, PNG ve WEBP formatlari desteklenir."
+            });
+        }
+
+        const long maxFileSize = 5 * 1024 * 1024;
+
+        if (file.Length > maxFileSize)
+        {
+            return BadRequest(new
+            {
+                message =
+                    "Sekilin olcusu maksimum 5 MB ola biler."
+            });
+        }
+
+        try
+        {
+            var imageUrl = await _cloudinaryService
+                .UploadImageAsync(file);
+
+            doctor.ImageUrl = imageUrl;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Hekimin sekli ugurla yuklendi.",
+                doctorId = doctor.Id,
+                imageUrl = doctor.ImageUrl
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new
+            {
+                message =
+                    "Sekil yuklenmesi zamani xeta bas verdi.",
+                error = ex.Message
+            });
+        }
+    }
+
     // DELETE: api/doctors/1
+    // Yalniz Admin
+    [Authorize(Roles = "Admin")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteDoctor(int id)
     {

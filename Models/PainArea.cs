@@ -12,7 +12,7 @@ public class PainArea
 
     public int RecommendedSpecialtyId { get; set; }
 
-    public Specialty RecommendedSpecialty { get; set; } = null!;
+    public Specialty? RecommendedSpecialty { get; set; }
 
     public bool IsActive { get; set; } = true;
 }

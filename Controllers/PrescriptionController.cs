@@ -16,78 +16,53 @@ public class PrescriptionController : ControllerBase
         _context = context;
     }
 
-    // GET: api/prescription
+    // GET: api/Prescription
     [HttpGet]
     public async Task<IActionResult> GetPrescriptions()
     {
         var prescriptions = await _context.Prescriptions
             .Include(p => p.Patient)
             .Include(p => p.Doctor)
+            .ThenInclude(d => d!.Specialty)
             .Select(p => new
             {
                 p.Id,
                 p.PatientId,
-
-                Patient = p.Patient == null
-                    ? null
-                    : new
-                    {
-                        p.Patient.Id,
-                        p.Patient.FullName
-                    },
-
+                PatientName = p.Patient != null ? p.Patient.FullName : null,
                 p.DoctorId,
-
-                Doctor = p.Doctor == null
-                    ? null
-                    : new
-                    {
-                        p.Doctor.Id,
-                        p.Doctor.FullName
-                    },
-
+                DoctorName = p.Doctor != null ? p.Doctor.FullName : null,
+                SpecialtyName = p.Doctor != null && p.Doctor.Specialty != null
+                    ? p.Doctor.Specialty.Name
+                    : null,
                 p.MedicationName,
                 p.Dosage,
                 p.Instructions,
                 p.PrescriptionDate
             })
-            .OrderByDescending(p => p.PrescriptionDate)
             .ToListAsync();
 
         return Ok(prescriptions);
     }
 
-    // GET: api/prescription/1
+    // GET: api/Prescription/5
     [HttpGet("{id}")]
     public async Task<IActionResult> GetPrescription(int id)
     {
         var prescription = await _context.Prescriptions
             .Include(p => p.Patient)
             .Include(p => p.Doctor)
+            .ThenInclude(d => d!.Specialty)
             .Where(p => p.Id == id)
             .Select(p => new
             {
                 p.Id,
                 p.PatientId,
-
-                Patient = p.Patient == null
-                    ? null
-                    : new
-                    {
-                        p.Patient.Id,
-                        p.Patient.FullName
-                    },
-
+                PatientName = p.Patient != null ? p.Patient.FullName : null,
                 p.DoctorId,
-
-                Doctor = p.Doctor == null
-                    ? null
-                    : new
-                    {
-                        p.Doctor.Id,
-                        p.Doctor.FullName
-                    },
-
+                DoctorName = p.Doctor != null ? p.Doctor.FullName : null,
+                SpecialtyName = p.Doctor != null && p.Doctor.Specialty != null
+                    ? p.Doctor.Specialty.Name
+                    : null,
                 p.MedicationName,
                 p.Dosage,
                 p.Instructions,
@@ -106,7 +81,7 @@ public class PrescriptionController : ControllerBase
         return Ok(prescription);
     }
 
-    // GET: api/prescription/patient/1
+    // GET: api/Prescription/patient/1
     [HttpGet("patient/{patientId}")]
     public async Task<IActionResult> GetPatientPrescriptions(int patientId)
     {
@@ -117,28 +92,24 @@ public class PrescriptionController : ControllerBase
         {
             return NotFound(new
             {
-                message = "Pasiyent tapilmadi."
+                message = "Xeste tapilmadi."
             });
         }
 
         var prescriptions = await _context.Prescriptions
             .Where(p => p.PatientId == patientId)
             .Include(p => p.Doctor)
+            .ThenInclude(d => d!.Specialty)
             .OrderByDescending(p => p.PrescriptionDate)
             .Select(p => new
             {
                 p.Id,
                 p.PatientId,
                 p.DoctorId,
-
-                Doctor = p.Doctor == null
-                    ? null
-                    : new
-                    {
-                        p.Doctor.Id,
-                        p.Doctor.FullName
-                    },
-
+                DoctorName = p.Doctor != null ? p.Doctor.FullName : null,
+                SpecialtyName = p.Doctor != null && p.Doctor.Specialty != null
+                    ? p.Doctor.Specialty.Name
+                    : null,
                 p.MedicationName,
                 p.Dosage,
                 p.Instructions,
@@ -149,7 +120,7 @@ public class PrescriptionController : ControllerBase
         return Ok(prescriptions);
     }
 
-    // GET: api/prescription/doctor/1
+    // GET: api/Prescription/doctor/1
     [HttpGet("doctor/{doctorId}")]
     public async Task<IActionResult> GetDoctorPrescriptions(int doctorId)
     {
@@ -172,15 +143,7 @@ public class PrescriptionController : ControllerBase
             {
                 p.Id,
                 p.PatientId,
-
-                Patient = p.Patient == null
-                    ? null
-                    : new
-                    {
-                        p.Patient.Id,
-                        p.Patient.FullName
-                    },
-
+                PatientName = p.Patient != null ? p.Patient.FullName : null,
                 p.DoctorId,
                 p.MedicationName,
                 p.Dosage,
@@ -192,10 +155,9 @@ public class PrescriptionController : ControllerBase
         return Ok(prescriptions);
     }
 
-    // POST: api/prescription
+    // POST: api/Prescription
     [HttpPost]
-    public async Task<IActionResult> CreatePrescription(
-        Prescription prescription)
+    public async Task<IActionResult> CreatePrescription(Prescription prescription)
     {
         var patientExists = await _context.Patients
             .AnyAsync(p => p.Id == prescription.PatientId);
@@ -204,7 +166,7 @@ public class PrescriptionController : ControllerBase
         {
             return BadRequest(new
             {
-                message = "Gosterilen pasiyent movcud deyil."
+                message = "Xeste tapilmadi."
             });
         }
 
@@ -215,7 +177,7 @@ public class PrescriptionController : ControllerBase
         {
             return BadRequest(new
             {
-                message = "Gosterilen hekim movcud deyil."
+                message = "Hekim tapilmadi."
             });
         }
 
@@ -235,18 +197,10 @@ public class PrescriptionController : ControllerBase
             });
         }
 
-        if (string.IsNullOrWhiteSpace(prescription.Instructions))
-        {
-            return BadRequest(new
-            {
-                message = "Istifade qaydasi bos ola bilmez."
-            });
-        }
-
+        prescription.Id = 0;
         prescription.PrescriptionDate = DateTime.UtcNow;
 
         _context.Prescriptions.Add(prescription);
-
         await _context.SaveChangesAsync();
 
         return CreatedAtAction(
@@ -261,11 +215,10 @@ public class PrescriptionController : ControllerBase
                 prescription.Dosage,
                 prescription.Instructions,
                 prescription.PrescriptionDate
-            }
-        );
+            });
     }
 
-    // PUT: api/prescription/1
+    // PUT: api/Prescription/5
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdatePrescription(
         int id,
@@ -297,7 +250,7 @@ public class PrescriptionController : ControllerBase
         {
             return BadRequest(new
             {
-                message = "Gosterilen pasiyent movcud deyil."
+                message = "Xeste tapilmadi."
             });
         }
 
@@ -308,7 +261,7 @@ public class PrescriptionController : ControllerBase
         {
             return BadRequest(new
             {
-                message = "Gosterilen hekim movcud deyil."
+                message = "Hekim tapilmadi."
             });
         }
 
@@ -328,14 +281,6 @@ public class PrescriptionController : ControllerBase
             });
         }
 
-        if (string.IsNullOrWhiteSpace(prescription.Instructions))
-        {
-            return BadRequest(new
-            {
-                message = "Istifade qaydasi bos ola bilmez."
-            });
-        }
-
         existingPrescription.PatientId = prescription.PatientId;
         existingPrescription.DoctorId = prescription.DoctorId;
         existingPrescription.MedicationName = prescription.MedicationName;
@@ -347,7 +292,7 @@ public class PrescriptionController : ControllerBase
         return NoContent();
     }
 
-    // DELETE: api/prescription/1
+    // DELETE: api/Prescription/5
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeletePrescription(int id)
     {
@@ -363,7 +308,6 @@ public class PrescriptionController : ControllerBase
         }
 
         _context.Prescriptions.Remove(prescription);
-
         await _context.SaveChangesAsync();
 
         return NoContent();

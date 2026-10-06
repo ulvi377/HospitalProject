@@ -51,7 +51,8 @@ public class AuthController : ControllerBase
             });
         }
 
-        var existingUser = await _userManager.FindByEmailAsync(request.Email);
+        var existingUser = await _userManager.FindByEmailAsync(
+            request.Email);
 
         if (existingUser != null)
         {
@@ -81,9 +82,27 @@ public class AuthController : ControllerBase
             });
         }
 
+        // Her yeni qeydiyyatdan kecen istifadeci
+        // default olaraq Patient olur.
+        var roleResult = await _userManager.AddToRoleAsync(
+            user,
+            "Patient");
+
+        if (!roleResult.Succeeded)
+        {
+            await _userManager.DeleteAsync(user);
+
+            return BadRequest(new
+            {
+                message = "Istifadeci rolu teyin edile bilmedi.",
+                errors = roleResult.Errors.Select(e => e.Description)
+            });
+        }
+
         return Ok(new
         {
-            message = "Qeydiyyat ugurla tamamlandi."
+            message = "Qeydiyyat ugurla tamamlandi.",
+            role = "Patient"
         });
     }
 
@@ -100,7 +119,8 @@ public class AuthController : ControllerBase
             });
         }
 
-        var user = await _userManager.FindByEmailAsync(request.Email);
+        var user = await _userManager.FindByEmailAsync(
+            request.Email);
 
         if (user == null)
         {
@@ -122,16 +142,21 @@ public class AuthController : ControllerBase
             });
         }
 
-        var token = GenerateJwtToken(user);
+        var roles = await _userManager.GetRolesAsync(user);
+
+        var token = GenerateJwtToken(user, roles);
 
         return Ok(new
         {
             message = "Login ugurludur.",
+            role = roles.FirstOrDefault(),
             token
         });
     }
 
-    private string GenerateJwtToken(ApplicationUser user)
+    private string GenerateJwtToken(
+        ApplicationUser user,
+        IList<string> roles)
     {
         var jwtKey = _configuration["Jwt:Key"];
 
@@ -157,6 +182,15 @@ public class AuthController : ControllerBase
                 ClaimTypes.Email,
                 user.Email ?? string.Empty)
         };
+
+        // User-in butun rollarini JWT-e elave et
+        foreach (var role in roles)
+        {
+            claims.Add(
+                new Claim(
+                    ClaimTypes.Role,
+                    role));
+        }
 
         var key = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(jwtKey!));

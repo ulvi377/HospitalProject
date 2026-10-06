@@ -6,11 +6,11 @@ public class PainAssessment
 
     public int PatientId { get; set; }
 
-    public Patient Patient { get; set; } = null!;
+    public Patient? Patient { get; set; }
 
     public int PainAreaId { get; set; }
 
-    public PainArea PainArea { get; set; } = null!;
+    public PainArea? PainArea { get; set; }
 
     public int PainLevel { get; set; }
 
