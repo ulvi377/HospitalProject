@@ -1,3 +1,4 @@
+
 using Hospital.Data;
 using Hospital.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -27,8 +28,11 @@ public class AppointmentReminderService : BackgroundService
         {
             try
             {
-                await CheckAppointmentsAsync(
-                    stoppingToken);
+                await CheckAppointmentsAsync(stoppingToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
             }
             catch (Exception ex)
             {
@@ -37,10 +41,20 @@ public class AppointmentReminderService : BackgroundService
                     "Appointment reminder yoxlanilmasi zamani xeta bas verdi.");
             }
 
-            await Task.Delay(
-                TimeSpan.FromMinutes(1),
-                stoppingToken);
+            try
+            {
+                await Task.Delay(
+                    TimeSpan.FromMinutes(1),
+                    stoppingToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
         }
+
+        _logger.LogInformation(
+            "Appointment Reminder Service dayandirildi.");
     }
 
     private async Task CheckAppointmentsAsync(
@@ -56,8 +70,9 @@ public class AppointmentReminderService : BackgroundService
 
         var now = DateTime.Now;
 
-        var reminderStart = now.AddMinutes(59);
-        var reminderEnd = now.AddMinutes(61);
+        // Appointment-a 1 saat veya daha az qalibsa
+        // reminder gonderilecek.
+        var reminderTime = now.AddHours(1);
 
         var appointments = await context.Appointments
             .Include(a => a.Patient)
@@ -66,8 +81,8 @@ public class AppointmentReminderService : BackgroundService
             .Where(a =>
                 !a.ReminderSent &&
                 a.Status != "Cancelled" &&
-                a.AppointmentDate >= reminderStart &&
-                a.AppointmentDate <= reminderEnd)
+                a.AppointmentDate > now &&
+                a.AppointmentDate <= reminderTime)
             .ToListAsync(cancellationToken);
 
         foreach (var appointment in appointments)
@@ -103,8 +118,9 @@ public class AppointmentReminderService : BackgroundService
                     <p>Salam,</p>
 
                     <p>
-                        Sizin hekim qebulunuza texminen
-                        <strong>1 saat</strong> qalib.
+                        Sizin hekim qebulunuza
+                        <strong>1 saat veya daha az</strong>
+                        vaxt qalib.
                     </p>
 
                     <p>

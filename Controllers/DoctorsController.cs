@@ -1,9 +1,11 @@
+
 using Hospital.Data;
 using Hospital.Interfaces;
 using Hospital.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace Hospital.Controllers;
 
@@ -23,8 +25,7 @@ public class DoctorsController : ControllerBase
         _cloudinaryService = cloudinaryService;
     }
 
-    // GET: api/doctors
-    // Admin + Doctor
+    [AllowAnonymous]
     [HttpGet]
     public async Task<IActionResult> GetDoctors(
         [FromQuery] string? search,
@@ -35,7 +36,6 @@ public class DoctorsController : ControllerBase
             .Include(d => d.Specialty)
             .AsQueryable();
 
-        // Search
         if (!string.IsNullOrWhiteSpace(search))
         {
             search = search.Trim();
@@ -48,7 +48,6 @@ public class DoctorsController : ControllerBase
                  d.Specialty.Name.Contains(search)));
         }
 
-        // Specialty filter
         if (!string.IsNullOrWhiteSpace(specialty))
         {
             specialty = specialty.Trim();
@@ -58,7 +57,6 @@ public class DoctorsController : ControllerBase
                 d.Specialty.Name.Contains(specialty));
         }
 
-        // Active status filter
         if (isActive.HasValue)
         {
             query = query.Where(d =>
@@ -89,8 +87,7 @@ public class DoctorsController : ControllerBase
         return Ok(doctors);
     }
 
-    // GET: api/doctors/1
-    // Admin + Doctor
+    [AllowAnonymous]
     [HttpGet("{id}")]
     public async Task<IActionResult> GetDoctor(int id)
     {
@@ -128,8 +125,6 @@ public class DoctorsController : ControllerBase
         return Ok(doctor);
     }
 
-    // POST: api/doctors
-    // Yalniz Admin
     [Authorize(Roles = "Admin")]
     [HttpPost]
     public async Task<ActionResult<Doctor>> CreateDoctor(
@@ -156,8 +151,6 @@ public class DoctorsController : ControllerBase
             doctor);
     }
 
-    // PUT: api/doctors/1
-    // Yalniz Admin
     [Authorize(Roles = "Admin")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateDoctor(
@@ -206,13 +199,12 @@ public class DoctorsController : ControllerBase
         return NoContent();
     }
 
-    // POST: api/doctors/{id}/image
-    // Yalniz Admin
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,Doctor")]
     [HttpPost("{id}/image")]
+    [Consumes("multipart/form-data")]
     public async Task<IActionResult> UploadDoctorImage(
-        int id,
-        IFormFile file)
+    int id,
+    IFormFile file)
     {
         var doctor = await _context.Doctors
             .FirstOrDefaultAsync(d => d.Id == id);
@@ -225,11 +217,50 @@ public class DoctorsController : ControllerBase
             });
         }
 
+        // Admin istənilən həkimin şəklini dəyişə bilər.
+        // Doctor yalnız öz profil şəklini dəyişə bilər.
+        if (!User.IsInRole("Admin"))
+        {
+            var userId = User.FindFirst(
+                ClaimTypes.NameIdentifier)?.Value;
+
+            var email = User.FindFirst(
+                ClaimTypes.Email)?.Value
+                ?? User.FindFirst("email")?.Value;
+
+            var isOwnProfile =
+                (!string.IsNullOrWhiteSpace(
+                    doctor.ApplicationUserId)
+                 && !string.IsNullOrWhiteSpace(userId)
+                 && doctor.ApplicationUserId == userId)
+                ||
+                (!string.IsNullOrWhiteSpace(email)
+                 && string.Equals(
+                     doctor.Email,
+                     email,
+                     StringComparison.OrdinalIgnoreCase));
+
+            if (!isOwnProfile)
+            {
+                return Forbid();
+            }
+        }
+
         if (file == null || file.Length == 0)
         {
             return BadRequest(new
             {
                 message = "Sekil fayli secilmelidir."
+            });
+        }
+
+        const long maxFileSize = 5 * 1024 * 1024;
+
+        if (file.Length > maxFileSize)
+        {
+            return BadRequest(new
+            {
+                message = "Sekilin olcusu maksimum 5 MB ola biler."
             });
         }
 
@@ -254,17 +285,6 @@ public class DoctorsController : ControllerBase
             });
         }
 
-        const long maxFileSize = 5 * 1024 * 1024;
-
-        if (file.Length > maxFileSize)
-        {
-            return BadRequest(new
-            {
-                message =
-                    "Sekilin olcusu maksimum 5 MB ola biler."
-            });
-        }
-
         try
         {
             var imageUrl = await _cloudinaryService
@@ -281,19 +301,16 @@ public class DoctorsController : ControllerBase
                 imageUrl = doctor.ImageUrl
             });
         }
-        catch (Exception ex)
+        catch
         {
             return StatusCode(500, new
             {
                 message =
-                    "Sekil yuklenmesi zamani xeta bas verdi.",
-                error = ex.Message
+                    "Sekil yuklenmesi zamani xeta bas verdi."
             });
         }
     }
 
-    // DELETE: api/doctors/1
-    // Yalniz Admin
     [Authorize(Roles = "Admin")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteDoctor(int id)

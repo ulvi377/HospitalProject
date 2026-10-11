@@ -14,12 +14,12 @@ public class HospitalDbContext : IdentityDbContext<ApplicationUser>
 	public DbSet<Specialty> Specialties { get; set; }
 
 	public DbSet<Doctor> Doctors { get; set; }
-
-	public DbSet<Patient> Patients { get; set; }
+    public DbSet<Review> Reviews { get; set; }
+    public DbSet<Patient> Patients { get; set; }
 	public DbSet<Appointment> Appointments { get; set; }
 	public DbSet<MedicalRecord> MedicalRecords { get; set; }
-
-	public DbSet<Prescription> Prescriptions { get; set; }
+    public DbSet<Notification> Notifications { get; set; }
+    public DbSet<Prescription> Prescriptions { get; set; }
 	public DbSet<DoctorSchedule> DoctorSchedules { get; set; }
 	public DbSet<PainArea> PainAreas { get; set; }
 	public DbSet<PainAssessment> PainAssessments { get; set; }

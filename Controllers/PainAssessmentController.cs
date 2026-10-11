@@ -1,5 +1,7 @@
+using System.Security.Claims;
 using Hospital.Data;
 using Hospital.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,306 +9,590 @@ namespace Hospital.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = "Admin,Doctor,Patient")]
 public class PainAssessmentController : ControllerBase
 {
-	private readonly HospitalDbContext _context;
+    private readonly HospitalDbContext _context;
 
-	public PainAssessmentController(HospitalDbContext context)
-	{
-		_context = context;
-	}
+    public PainAssessmentController(HospitalDbContext context)
+    {
+        _context = context;
+    }
 
-	// GET: api/PainAssessment
-	[HttpGet]
-	public async Task<IActionResult> GetPainAssessments(
-		[FromQuery] int? patientId,
-		[FromQuery] int? painAreaId,
-		[FromQuery] bool? isEmergency)
-	{
-		var query = _context.PainAssessments
-			.Include(p => p.Patient)
-			.Include(p => p.PainArea)
-				.ThenInclude(p => p.RecommendedSpecialty)
-			.AsQueryable();
+    private string? CurrentUserId =>
+        User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-		if (patientId.HasValue)
-		{
-			query = query.Where(p =>
-				p.PatientId == patientId.Value);
-		}
+    private string? CurrentUserRole =>
+        User.FindFirstValue(ClaimTypes.Role);
 
-		if (painAreaId.HasValue)
-		{
-			query = query.Where(p =>
-				p.PainAreaId == painAreaId.Value);
-		}
+    private async Task<Patient?> GetCurrentPatientAsync()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentUserId))
+            return null;
 
-		if (isEmergency.HasValue)
-		{
-			query = query.Where(p =>
-				p.IsEmergency == isEmergency.Value);
-		}
+        return await _context.Patients
+            .FirstOrDefaultAsync(p => p.UserId == CurrentUserId);
+    }
 
-		var assessments = await query
-			.OrderByDescending(p => p.AssessmentDate)
-			.Select(p => new
-			{
-				p.Id,
-				p.PatientId,
+    private async Task<bool> CanAccessPatientAsync(int patientId)
+    {
+        if (CurrentUserRole != "Patient")
+            return true;
 
-				Patient = new
-				{
-					p.Patient!.Id,
-					p.Patient.FullName
-				},
+        var patient = await GetCurrentPatientAsync();
 
-				p.PainAreaId,
+        return patient != null && patient.Id == patientId;
+    }
 
-				PainArea = new
-				{
-					p.PainArea!.Id,
-					p.PainArea.Name,
-					p.PainArea.BodyPart,
+    // GET: api/PainAssessment
+    [HttpGet]
+    public async Task<IActionResult> GetPainAssessments(
+        [FromQuery] int? patientId,
+        [FromQuery] int? painAreaId,
+        [FromQuery] bool? isEmergency)
+    {
+        var query = _context.PainAssessments
+            .Include(p => p.Patient)
+            .Include(p => p.PainArea)
+                .ThenInclude(a => a!.RecommendedSpecialty)
+            .AsQueryable();
 
-					RecommendedSpecialty =
-						new
-						{
-							p.PainArea.RecommendedSpecialty!.Id,
-							p.PainArea.RecommendedSpecialty.Name
-						}
-				},
+        if (CurrentUserRole == "Patient")
+        {
+            var patient = await GetCurrentPatientAsync();
 
-				p.PainLevel,
-				p.Symptoms,
-				p.Description,
-				p.AssessmentDate,
-				p.IsEmergency
-			})
-			.ToListAsync();
+            if (patient == null)
+                return Forbid();
 
-		return Ok(assessments);
-	}
+            query = query.Where(p => p.PatientId == patient.Id);
+        }
+        else if (patientId.HasValue)
+        {
+            query = query.Where(
+                p => p.PatientId == patientId.Value);
+        }
 
-	// GET: api/PainAssessment/1
-	[HttpGet("{id}")]
-	public async Task<IActionResult> GetPainAssessment(int id)
-	{
-		var assessment = await _context.PainAssessments
-			.Include(p => p.Patient)
-			.Include(p => p.PainArea)
-				.ThenInclude(p => p.RecommendedSpecialty)
-			.Where(p => p.Id == id)
-			.Select(p => new
-			{
-				p.Id,
-				p.PatientId,
+        if (painAreaId.HasValue)
+        {
+            query = query.Where(
+                p => p.PainAreaId == painAreaId.Value);
+        }
 
-				Patient = new
-				{
-					p.Patient!.Id,
-					p.Patient.FullName
-				},
+        if (isEmergency.HasValue)
+        {
+            query = query.Where(
+                p => p.IsEmergency == isEmergency.Value);
+        }
 
-				p.PainAreaId,
+        var assessments = await query
+            .OrderByDescending(p => p.AssessmentDate)
+            .Select(p => new
+            {
+                p.Id,
+                p.PatientId,
 
-				PainArea = new
-				{
-					p.PainArea!.Id,
-					p.PainArea.Name,
-					p.PainArea.BodyPart,
+                Patient = p.Patient == null
+                    ? null
+                    : new
+                    {
+                        p.Patient.Id,
+                        p.Patient.FullName
+                    },
 
-					RecommendedSpecialty =
-						new
-						{
-							p.PainArea.RecommendedSpecialty!.Id,
-							p.PainArea.RecommendedSpecialty.Name
-						}
-				},
+                p.PainAreaId,
 
-				p.PainLevel,
-				p.Symptoms,
-				p.Description,
-				p.AssessmentDate,
-				p.IsEmergency
-			})
-			.FirstOrDefaultAsync();
+                PainArea = p.PainArea == null
+                    ? null
+                    : new
+                    {
+                        p.PainArea.Id,
+                        p.PainArea.Name,
+                        p.PainArea.BodyPart,
 
-		if (assessment == null)
-		{
-			return NotFound(new
-			{
-				message = "Agri qiymetlendirmesi tapilmadi."
-			});
-		}
+                        RecommendedSpecialty =
+                            p.PainArea.RecommendedSpecialty == null
+                                ? null
+                                : new
+                                {
+                                    p.PainArea.RecommendedSpecialty.Id,
+                                    p.PainArea.RecommendedSpecialty.Name
+                                }
+                    },
 
-		return Ok(assessment);
-	}
+                p.PainLevel,
+                p.Symptoms,
+                p.Description,
+                p.AssessmentDate,
+                p.IsEmergency
+            })
+            .ToListAsync();
 
-	// GET: api/PainAssessment/1/recommendation
-	[HttpGet("{id}/recommendation")]
-	public async Task<IActionResult> GetDoctorRecommendation(int id)
-	{
-		var assessment = await _context.PainAssessments
-			.Include(p => p.PainArea)
-				.ThenInclude(p => p.RecommendedSpecialty)
-			.FirstOrDefaultAsync(p => p.Id == id);
+        return Ok(assessments);
+    }
 
-		if (assessment == null)
-		{
-			return NotFound(new
-			{
-				message = "Agri qiymetlendirmesi tapilmadi."
-			});
-		}
+    // GET: api/PainAssessment/5
+    [HttpGet("{id:int}")]
+    public async Task<IActionResult> GetPainAssessment(int id)
+    {
+        var assessment = await _context.PainAssessments
+            .Include(p => p.Patient)
+            .Include(p => p.PainArea)
+                .ThenInclude(a => a!.RecommendedSpecialty)
+            .FirstOrDefaultAsync(p => p.Id == id);
 
-		if (assessment.PainArea == null ||
-			assessment.PainArea.RecommendedSpecialty == null)
-		{
-			return BadRequest(new
-			{
-				message =
-					"Agri nahiyesi ucun tavsiye olunan ixtisas tapilmadi."
-			});
-		}
+        if (assessment == null)
+        {
+            return NotFound(new
+            {
+                message = "Ağrı qiymətləndirməsi tapılmadı."
+            });
+        }
 
-		var specialtyId =
-			assessment.PainArea.RecommendedSpecialtyId;
+        if (!await CanAccessPatientAsync(assessment.PatientId))
+            return Forbid();
 
-		var doctors = await _context.Doctors
-			.Include(d => d.Specialty)
-			.Where(d =>
-				d.SpecialtyId == specialtyId &&
-				d.IsActive)
-			.OrderBy(d => d.FullName)
-			.Select(d => new
-			{
-				d.Id,
-				d.FullName,
-				d.Email,
-				d.PhoneNumber,
-				d.ImageUrl,
+        return Ok(new
+        {
+            assessment.Id,
+            assessment.PatientId,
 
-				Specialty = d.Specialty == null
-					? null
-					: new
-					{
-						d.Specialty.Id,
-						d.Specialty.Name
-					}
-			})
-			.ToListAsync();
+            Patient = assessment.Patient == null
+                ? null
+                : new
+                {
+                    assessment.Patient.Id,
+                    assessment.Patient.FullName
+                },
 
-		var emergencyNotice = assessment.IsEmergency
-			? "Bu qiymetlendirme tecili kimi qeyd olunub. Tibbi yardim ucun tecili tibbi xidmete muraciet edilmelidir."
-			: null;
+            assessment.PainAreaId,
 
-		return Ok(new
-		{
-			assessmentId = assessment.Id,
+            PainArea = assessment.PainArea == null
+                ? null
+                : new
+                {
+                    assessment.PainArea.Id,
+                    assessment.PainArea.Name,
+                    assessment.PainArea.BodyPart,
 
-			patientId = assessment.PatientId,
+                    RecommendedSpecialty =
+                        assessment.PainArea.RecommendedSpecialty == null
+                            ? null
+                            : new
+                            {
+                                assessment.PainArea.RecommendedSpecialty.Id,
+                                assessment.PainArea.RecommendedSpecialty.Name
+                            }
+                },
 
-			painArea = new
-			{
-				assessment.PainArea.Id,
-				assessment.PainArea.Name,
-				assessment.PainArea.BodyPart
-			},
+            assessment.PainLevel,
+            assessment.Symptoms,
+            assessment.Description,
+            assessment.AssessmentDate,
+            assessment.IsEmergency
+        });
+    }
 
-			painLevel = assessment.PainLevel,
+    // GET: api/PainAssessment/5/recommendation
+    [HttpGet("{id:int}/recommendation")]
+    public async Task<IActionResult> GetDoctorRecommendation(int id)
+    {
+        var assessment = await _context.PainAssessments
+            .Include(p => p.PainArea)
+                .ThenInclude(a => a!.RecommendedSpecialty)
+            .FirstOrDefaultAsync(p => p.Id == id);
 
-			isEmergency = assessment.IsEmergency,
+        if (assessment == null)
+        {
+            return NotFound(new
+            {
+                message = "Ağrı qiymətləndirməsi tapılmadı."
+            });
+        }
 
-			emergencyNotice,
+        if (!await CanAccessPatientAsync(assessment.PatientId))
+            return Forbid();
 
-			recommendedSpecialty = new
-			{
-				assessment.PainArea.RecommendedSpecialty.Id,
-				assessment.PainArea.RecommendedSpecialty.Name
-			},
+        var area = assessment.PainArea;
+        var specialty = area?.RecommendedSpecialty;
 
-			doctors,
+        if (area == null || specialty == null)
+        {
+            return BadRequest(new
+            {
+                message =
+                    "Ağrı nahiyəsi üçün tövsiyə olunan ixtisas tapılmadı."
+            });
+        }
 
-			message = doctors.Count > 0
-				? "Agri qiymetlendirmesine uygun aktiv hekimler tapildi."
-				: "Bu ixtisas uzre aktiv hekim tapilmadi."
-		});
-	}
+        var doctors = await _context.Doctors
+            .Where(d =>
+                d.SpecialtyId == area.RecommendedSpecialtyId &&
+                d.IsActive)
+            .OrderBy(d => d.FullName)
+            .Select(d => new
+            {
+                d.Id,
+                d.FullName,
+                d.Email,
+                d.PhoneNumber,
+                d.ImageUrl,
 
-	// POST: api/PainAssessment
-	[HttpPost]
-	public async Task<IActionResult> CreatePainAssessment(
-		PainAssessment assessment)
-	{
-		// Patient yoxlanışı
-		var patientExists = await _context.Patients
-			.AnyAsync(p => p.Id == assessment.PatientId);
+                Specialty = d.Specialty == null
+                    ? null
+                    : new
+                    {
+                        d.Specialty.Id,
+                        d.Specialty.Name
+                    }
+            })
+            .ToListAsync();
 
-		if (!patientExists)
-		{
-			return BadRequest(new
-			{
-				message = "Gosterilen pasiyent movcud deyil."
-			});
-		}
+        return Ok(new
+        {
+            assessmentId = assessment.Id,
+            patientId = assessment.PatientId,
 
-		// PainArea yoxlanışı
-		var painAreaExists = await _context.PainAreas
-			.AnyAsync(p => p.Id == assessment.PainAreaId);
+            painArea = new
+            {
+                area.Id,
+                area.Name,
+                area.BodyPart
+            },
 
-		if (!painAreaExists)
-		{
-			return BadRequest(new
-			{
-				message = "Gosterilen agri nahiyesi movcud deyil."
-			});
-		}
+            painLevel = assessment.PainLevel,
+            isEmergency = assessment.IsEmergency,
 
-		// PainLevel yoxlanışı
-		if (assessment.PainLevel < 1 ||
-			assessment.PainLevel > 10)
-		{
-			return BadRequest(new
-			{
-				message =
-					"Agri seviyesi 1 ile 10 arasinda olmalidir."
-			});
-		}
+            emergencyNotice = assessment.IsEmergency
+                ? "Təcili tibbi qiymətləndirmə tələb oluna bilər. Təhlükəli simptomlar varsa, dərhal tibbi yardım alın."
+                : null,
 
-		// Tarixi server özü təyin edir
-		assessment.AssessmentDate = DateTime.UtcNow;
+            recommendedSpecialty = new
+            {
+                specialty.Id,
+                specialty.Name
+            },
 
-		_context.PainAssessments.Add(assessment);
+            doctors,
 
-		await _context.SaveChangesAsync();
+            message = doctors.Count > 0
+                ? "Uyğun aktiv həkimlər tapıldı."
+                : "Bu ixtisas üzrə aktiv həkim tapılmadı."
+        });
+    }
 
-		// Tövsiyə olunan specialty
-		var recommendation = await _context.PainAreas
-			.Include(p => p.RecommendedSpecialty)
-			.Where(p => p.Id == assessment.PainAreaId)
-			.Select(p => new
-			{
-				SpecialtyId = p.RecommendedSpecialty!.Id,
-				SpecialtyName = p.RecommendedSpecialty.Name
-			})
-			.FirstAsync();
+    // POST: api/PainAssessment
+    [HttpPost]
+    public async Task<IActionResult> CreatePainAssessment(
+        [FromBody] PainAssessment assessment)
+    {
+        if (assessment == null)
+        {
+            return BadRequest(new
+            {
+                message = "Məlumatlar yanlışdır."
+            });
+        }
 
-		return CreatedAtAction(
-			nameof(GetPainAssessment),
-			new { id = assessment.Id },
-			new
-			{
-				assessment.Id,
-				assessment.PatientId,
-				assessment.PainAreaId,
-				assessment.PainLevel,
-				assessment.Symptoms,
-				assessment.Description,
-				assessment.AssessmentDate,
-				assessment.IsEmergency,
+        if (CurrentUserRole == "Patient")
+        {
+            var patient = await GetCurrentPatientAsync();
 
-				RecommendedSpecialty = recommendation
-			}
-		);
-	}
+            if (patient == null)
+                return Forbid();
+
+            assessment.PatientId = patient.Id;
+        }
+        else if (assessment.PatientId <= 0)
+        {
+            return BadRequest(new
+            {
+                message = "Pasiyent seçilməlidir."
+            });
+        }
+
+        var patientExists = await _context.Patients
+            .AnyAsync(p => p.Id == assessment.PatientId);
+
+        if (!patientExists)
+        {
+            return BadRequest(new
+            {
+                message = "Göstərilən pasiyent mövcud deyil."
+            });
+        }
+
+        if (assessment.PainLevel < 1 ||
+            assessment.PainLevel > 10)
+        {
+            return BadRequest(new
+            {
+                message = "Ağrı səviyyəsi 1 ilə 10 arasında olmalıdır."
+            });
+        }
+
+        var painArea = await _context.PainAreas
+            .Include(p => p.RecommendedSpecialty)
+            .FirstOrDefaultAsync(p =>
+                p.Id == assessment.PainAreaId &&
+                p.IsActive);
+
+        if (painArea == null)
+        {
+            return BadRequest(new
+            {
+                message =
+                    "Göstərilən ağrı nahiyəsi mövcud deyil və ya aktiv deyil."
+            });
+        }
+
+        assessment.AssessmentDate = DateTime.UtcNow;
+        assessment.IsEmergency = assessment.PainLevel >= 8;
+
+        _context.PainAssessments.Add(assessment);
+        await _context.SaveChangesAsync();
+
+        var doctors = await _context.Doctors
+            .Where(d =>
+                d.SpecialtyId == painArea.RecommendedSpecialtyId &&
+                d.IsActive)
+            .OrderBy(d => d.FullName)
+            .Select(d => new
+            {
+                d.Id,
+                d.FullName,
+                d.Email,
+                d.PhoneNumber,
+                d.ImageUrl
+            })
+            .ToListAsync();
+
+        return CreatedAtAction(
+            nameof(GetPainAssessment),
+            new { id = assessment.Id },
+            new
+            {
+                assessment.Id,
+                assessment.PatientId,
+                assessment.PainAreaId,
+                assessment.PainLevel,
+                assessment.Symptoms,
+                assessment.Description,
+                assessment.AssessmentDate,
+                assessment.IsEmergency,
+
+                RecommendedSpecialty =
+                    painArea.RecommendedSpecialty == null
+                        ? null
+                        : new
+                        {
+                            painArea.RecommendedSpecialty.Id,
+                            painArea.RecommendedSpecialty.Name
+                        },
+
+                RecommendedDoctors = doctors
+            });
+    }
+
+    // POST: api/PainAssessment/analyze
+    // Ödənişsiz, qayda əsaslı ilkin məlumat sistemi.
+    // Bu sistem tibbi diaqnoz qoymur.
+    [HttpPost("analyze")]
+    public IActionResult AnalyzePain(
+        [FromBody] PainAnalysisRequest request)
+    {
+        if (request == null ||
+            string.IsNullOrWhiteSpace(request.BodyPart) ||
+            request.PainLevel < 1 ||
+            request.PainLevel > 10)
+        {
+            return BadRequest(new
+            {
+                message =
+                    "Bədən nahiyəsi və 1-10 arası ağrı səviyyəsi daxil edilməlidir."
+            });
+        }
+
+        if (request.BodyPart.Length > 100 ||
+            (request.Symptoms?.Length ?? 0) > 2000 ||
+            (request.Description?.Length ?? 0) > 2000 ||
+            (request.Duration?.Length ?? 0) > 100)
+        {
+            return BadRequest(new
+            {
+                message = "Göndərilən məlumatlar çox uzundur."
+            });
+        }
+
+        var bodyPart = request.BodyPart.ToLowerInvariant();
+
+        var symptoms =
+            $"{request.Symptoms} {request.Description}"
+            .ToLowerInvariant();
+
+        var emergencyKeywords = new[]
+        {
+            "sinə ağrısı",
+            "sinəmdə ağrı",
+            "nəfəs darlığı",
+            "nəfəs ala bilmirəm",
+            "huşunu itirmə",
+            "huşumu itirdim",
+            "qəfil zəiflik",
+            "danışıq pozulması",
+            "dayanmayan qanaxma",
+            "güclü qanaxma",
+            "üzün bir tərəfinin sallanması",
+            "sudden weakness",
+            "chest pain",
+            "difficulty breathing",
+            "shortness of breath"
+        };
+
+        var urgentWarning =
+            request.PainLevel >= 8 ||
+            emergencyKeywords.Any(x => symptoms.Contains(x));
+
+        string possibleCauses;
+        string nextSteps;
+
+        if (bodyPart.Contains("head") ||
+            bodyPart.Contains("baş"))
+        {
+            possibleCauses =
+                "Baş ağrısı gərginlik, miqren və ya başqa sağlamlıq " +
+                "problemləri ilə əlaqəli ola bilər. Təkcə bu məlumatla " +
+                "səbəbi müəyyən etmək mümkün deyil.";
+
+            nextSteps =
+                "Dincəl və vəziyyətini izlə. Qəfil başlayan çox güclü " +
+                "baş ağrısı, huş dəyişikliyi və ya qəfil nevroloji " +
+                "əlamətlər varsa, dərhal təcili tibbi yardım al.";
+        }
+        else if (bodyPart.Contains("chest") ||
+                 bodyPart.Contains("sinə"))
+        {
+            possibleCauses =
+                "Sinə ağrısının müxtəlif səbəbləri ola bilər. " +
+                "Bəziləri əzələ ilə əlaqəli olsa da, ürək və ağciyər " +
+                "problemləri də mümkündür. Bu sistem səbəbi müəyyən etmir.";
+
+            nextSteps =
+                "Yeni başlayan, davam edən və ya səbəbi bilinməyən " +
+                "sinə ağrısını təcili qiymətləndirmək lazımdır. " +
+                "Xüsusilə nəfəs darlığı, soyuq tər və ya huşsuzluq " +
+                "varsa, dərhal təcili yardıma müraciət et.";
+        }
+        else if (bodyPart.Contains("back") ||
+                 bodyPart.Contains("bel") ||
+                 bodyPart.Contains("spine") ||
+                 bodyPart.Contains("kürək"))
+        {
+            possibleCauses =
+                "Bel və kürək ağrısı əzələ gərginliyi və ya digər " +
+                "onurğa problemləri ilə əlaqəli ola bilər. Dəqiq " +
+                "səbəb müayinə olmadan bilinmir.";
+
+            nextSteps =
+                "Ağrını artıran hərəkətlərdən çəkin. Ayaqlarda yeni " +
+                "zəiflik, qasıq nahiyəsində keyimə və ya sidik-nəcisə " +
+                "nəzarətin itməsi olarsa, təcili tibbi yardım al.";
+        }
+        else if (bodyPart.Contains("stomach") ||
+                 bodyPart.Contains("abdomen") ||
+                 bodyPart.Contains("qarın"))
+        {
+            possibleCauses =
+                "Qarın ağrısı həzm problemləri və başqa müxtəlif " +
+                "səbəblərlə bağlı ola bilər. Ağrının yeri, müddəti " +
+                "və əlavə simptomlar qiymətləndirmə üçün vacibdir.";
+
+            nextSteps =
+                "Ağrı güclüdürsə və ya artırsa, yaxud qarın sərtləşməsi, " +
+                "davamlı qusma, qanaxma və ya huşsuzluq varsa, " +
+                "təcili tibbi yardım al.";
+        }
+        else if (bodyPart.Contains("arm") ||
+                 bodyPart.Contains("leg") ||
+                 bodyPart.Contains("hand") ||
+                 bodyPart.Contains("foot") ||
+                 bodyPart.Contains("qol") ||
+                 bodyPart.Contains("ayaq") ||
+                 bodyPart.Contains("əl"))
+        {
+            possibleCauses =
+                "Qol, əl və ya ayaq ağrısı əzələ gərginliyi, zədə " +
+                "və ya digər səbəblərlə əlaqəli ola bilər. Bu məlumat " +
+                "dəqiq səbəbi təsdiqləmir.";
+
+            nextSteps =
+                "Nahiyəni əlavə zədədən qoru. Güclü şişkinlik, " +
+                "deformasiya, keyimə, hərəkət edə bilməmə və ya " +
+                "qəfil zəiflik varsa, tibbi yardım al.";
+        }
+        else
+        {
+            possibleCauses =
+                "Ağrı müxtəlif səbəblərlə əlaqəli ola bilər. " +
+                "Mövcud məlumatlar konkret səbəbi müəyyən etmək " +
+                "və ya diaqnoz qoymaq üçün kifayət deyil.";
+
+            nextSteps =
+                "Ağrı davam edərsə, təkrarlanarsa və ya gündəlik " +
+                "fəaliyyətinə mane olarsa, həkimə müraciət et.";
+        }
+
+        var severityText = request.PainLevel switch
+        {
+            <= 3 => "Aşağı ağrı səviyyəsi bildirilib.",
+            <= 6 => "Orta səviyyəli ağrı bildirilib.",
+            <= 7 => "Yüksək səviyyəli ağrı bildirilib.",
+            _ => "Çox yüksək ağrı səviyyəsi bildirilib."
+        };
+
+        var durationText =
+            string.IsNullOrWhiteSpace(request.Duration)
+                ? "Ağrının müddəti qeyd edilməyib."
+                : $"Bildirilən müddət: {request.Duration.Trim()}.";
+
+        var symptomsText =
+            string.IsNullOrWhiteSpace(request.Symptoms)
+                ? "Əlavə simptomlar qeyd edilməyib."
+                : $"Bildirilən simptomlar: {request.Symptoms.Trim()}.";
+
+        var analysis =
+            $"İlkin məlumat\n\n" +
+            $"Bədən nahiyəsi: {request.BodyPart.Trim()}\n" +
+            $"Ağrı səviyyəsi: {request.PainLevel}/10\n" +
+            $"{severityText}\n" +
+            $"{durationText}\n\n" +
+            $"Mümkün izahlar:\n{possibleCauses}\n\n" +
+            $"Növbəti addımlar:\n{nextSteps}\n\n" +
+            $"{symptomsText}\n\n" +
+            "Bu nəticə əvvəlcədən müəyyən edilmiş qaydalara əsaslanır; " +
+            "süni intellekt tərəfindən yaradılmır və tibbi diaqnoz deyil.";
+
+        return Ok(new
+        {
+            analysis,
+            isEmergencyWarning = urgentWarning,
+            emergencyMessage = urgentWarning
+                ? "Xəbərdarlıq: bildirilən ağrı səviyyəsi və ya simptomlar təcili qiymətləndirmə tələb edə bilər. Sinə ağrısı, nəfəs darlığı, huşun itməsi və ya qəfil nevroloji əlamətlər varsa, dərhal yerli təcili tibbi yardıma müraciət et."
+                : null,
+            disclaimer =
+                "Bu məlumat tibbi diaqnoz deyil və həkim müayinəsini əvəz etmir."
+        });
+    }
+}
+
+public class PainAnalysisRequest
+{
+    public string BodyPart { get; set; } = string.Empty;
+
+    public int PainLevel { get; set; }
+
+    public string? Symptoms { get; set; }
+
+    public string? Description { get; set; }
+
+    public string? Duration { get; set; }
 }

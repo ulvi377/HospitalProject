@@ -1,3 +1,4 @@
+
 using System.Security.Claims;
 using Hospital.Data;
 using Hospital.Models;
@@ -23,10 +24,61 @@ public class AppointmentController : ControllerBase
         _userManager = userManager;
     }
 
+    // Bildiris yaratmaq ucun komekci metod
+    private async Task AddAppointmentNotificationAsync(
+        int patientId,
+        int appointmentId,
+        string status)
+    {
+        string title;
+        string message;
+        string type;
+
+        switch (status.Trim().ToLowerInvariant())
+        {
+            case "pending":
+                title = "Rezerv sorğunuz yaradıldı";
+                message = "Rezerv sorğunuz yaradıldı. Həkimin təsdiqi gözlənilir.";
+                type = "info";
+                break;
+
+            case "confirmed":
+                title = "Rezerviniz təsdiqləndi";
+                message = "Həkim rezervinizi təsdiqlədi.";
+                type = "success";
+                break;
+
+            case "cancelled":
+                title = "Rezerv ləğv edildi";
+                message = "Rezerviniz ləğv edildi.";
+                type = "warning";
+                break;
+
+            case "completed":
+                title = "Qəbul tamamlandı";
+                message = "Həkim qəbulunuzu tamamlanmış kimi qeyd etdi.";
+                type = "success";
+                break;
+
+            default:
+                return;
+        }
+
+        _context.Notifications.Add(new Notification
+        {
+            PatientId = patientId,
+            AppointmentId = appointmentId,
+            Title = title,
+            Message = message,
+            Type = type,
+            IsRead = false,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        await _context.SaveChangesAsync();
+    }
+
     // GET: api/appointment
-    // Admin -> butun appointmentler
-    // Doctor -> yalniz oz appointmentleri
-    // Patient -> yalniz oz appointmentleri
     [Authorize(Roles = "Admin,Doctor,Patient")]
     [HttpGet]
     public async Task<IActionResult> GetAppointments(
@@ -77,21 +129,17 @@ public class AppointmentController : ControllerBase
         if (!string.IsNullOrWhiteSpace(status))
         {
             status = status.Trim();
-
-            query = query.Where(a =>
-                a.Status == status);
+            query = query.Where(a => a.Status == status);
         }
 
         if (doctorId.HasValue)
         {
-            query = query.Where(a =>
-                a.DoctorId == doctorId.Value);
+            query = query.Where(a => a.DoctorId == doctorId.Value);
         }
 
         if (patientId.HasValue)
         {
-            query = query.Where(a =>
-                a.PatientId == patientId.Value);
+            query = query.Where(a => a.PatientId == patientId.Value);
         }
 
         var appointments = await query
@@ -134,9 +182,6 @@ public class AppointmentController : ControllerBase
     }
 
     // GET: api/appointment/1
-    // Admin -> istediyi appointment
-    // Doctor -> yalniz oz appointmenti
-    // Patient -> yalniz oz appointmenti
     [Authorize(Roles = "Admin,Doctor,Patient")]
     [HttpGet("{id}")]
     public async Task<IActionResult> GetAppointment(int id)
@@ -223,9 +268,6 @@ public class AppointmentController : ControllerBase
     }
 
     // GET: api/appointment/patient/1
-    // Admin -> istediyi patient
-    // Patient -> yalniz oz appointmentleri
-    // Doctor -> bu endpoint istifade ede bilmez
     [Authorize(Roles = "Admin,Patient")]
     [HttpGet("patient/{patientId}")]
     public async Task<IActionResult> GetPatientAppointments(
@@ -282,9 +324,6 @@ public class AppointmentController : ControllerBase
     }
 
     // GET: api/appointment/doctor/1
-    // Admin -> istediyi doctor
-    // Doctor -> yalniz oz appointmentleri
-    // Patient -> bu endpoint istifade ede bilmez
     [Authorize(Roles = "Admin,Doctor")]
     [HttpGet("doctor/{doctorId}")]
     public async Task<IActionResult> GetDoctorAppointments(
@@ -341,7 +380,6 @@ public class AppointmentController : ControllerBase
     }
 
     // POST: api/appointment
-    // Admin + Doctor + Patient
     [Authorize(Roles = "Admin,Doctor,Patient")]
     [HttpPost]
     public async Task<IActionResult> CreateAppointment(
@@ -351,39 +389,59 @@ public class AppointmentController : ControllerBase
         var isDoctor = User.IsInRole("Doctor");
         var isPatient = User.IsInRole("Patient");
 
-        // Patient oz adina appointment yarada biler
-        if (isPatient)
+        if (isPatient && !isAdmin)
         {
             var currentUserId = User.FindFirstValue(
                 ClaimTypes.NameIdentifier);
 
-            var patient = await _context.Patients
-                .FirstOrDefaultAsync(p =>
-                    p.Id == appointment.PatientId);
-
-            if (patient == null)
+            if (string.IsNullOrWhiteSpace(currentUserId))
             {
-                return BadRequest(new
+                return Unauthorized(new
                 {
-                    message = "Gosterilen pasiyent movcud deyil."
+                    message = "Istifadeci melumatlari tapilmadi."
                 });
             }
 
-            if (patient.UserId != currentUserId)
+            var patient = await _context.Patients
+                .FirstOrDefaultAsync(p => p.UserId == currentUserId);
+
+            if (patient == null)
             {
-                return Forbid();
+                var user = await _userManager.FindByIdAsync(currentUserId);
+
+                if (user == null)
+                {
+                    return Unauthorized(new
+                    {
+                        message = "Istifadeci tapilmadi."
+                    });
+                }
+
+                patient = new Patient
+                {
+                    FullName = !string.IsNullOrWhiteSpace(user.FullName)
+                        ? user.FullName
+                        : user.Email ?? "Pasiyent",
+                    UserId = user.Id,
+                    PhoneNumber = user.PhoneNumber ?? string.Empty,
+                    DateOfBirth = null,
+                    Gender = string.Empty,
+                    Address = string.Empty
+                };
+
+                _context.Patients.Add(patient);
+                await _context.SaveChangesAsync();
             }
+
+            appointment.PatientId = patient.Id;
         }
 
-        // Doctor yalniz oz adina appointment yarada biler
-        if (isDoctor)
+        if (isDoctor && !isAdmin)
         {
-            var currentUserEmail = User.FindFirstValue(
-                ClaimTypes.Email);
+            var currentUserEmail = User.FindFirstValue(ClaimTypes.Email);
 
             var doctor = await _context.Doctors
-                .FirstOrDefaultAsync(d =>
-                    d.Id == appointment.DoctorId);
+                .FirstOrDefaultAsync(d => d.Id == appointment.DoctorId);
 
             if (doctor == null)
             {
@@ -399,7 +457,6 @@ public class AppointmentController : ControllerBase
             }
         }
 
-        // Patient yoxlanisi
         var patientExists = await _context.Patients
             .AnyAsync(p => p.Id == appointment.PatientId);
 
@@ -411,7 +468,6 @@ public class AppointmentController : ControllerBase
             });
         }
 
-        // Doctor yoxlanisi
         var doctorExists = await _context.Doctors
             .AnyAsync(d => d.Id == appointment.DoctorId);
 
@@ -423,20 +479,17 @@ public class AppointmentController : ControllerBase
             });
         }
 
-        // Tarix kecmisde ola bilmez
         if (appointment.AppointmentDate <= DateTime.Now)
         {
             return BadRequest(new
             {
-                message =
-                    "Qebul vaxti gelecek tarixde olmalidir."
+                message = "Qebul vaxti gelecek tarixde olmalidir."
             });
         }
 
         var dayOfWeek = appointment.AppointmentDate.DayOfWeek;
         var appointmentTime = appointment.AppointmentDate.TimeOfDay;
 
-        // Hekimin hemin gun ucun qrafiki
         var schedule = await _context.DoctorSchedules
             .FirstOrDefaultAsync(s =>
                 s.DoctorId == appointment.DoctorId &&
@@ -447,12 +500,10 @@ public class AppointmentController : ControllerBase
         {
             return BadRequest(new
             {
-                message =
-                    "Hekimin secilen gun ucun is qrafiki yoxdur."
+                message = "Hekimin secilen gun ucun is qrafiki yoxdur."
             });
         }
 
-        // Qebul saati qrafik daxilinde olmalidir
         if (appointmentTime < schedule.StartTime ||
             appointmentTime >= schedule.EndTime)
         {
@@ -463,7 +514,6 @@ public class AppointmentController : ControllerBase
             });
         }
 
-        // Eyni hekim + eyni vaxt
         var appointmentExists = await _context.Appointments
             .AnyAsync(a =>
                 a.DoctorId == appointment.DoctorId &&
@@ -474,8 +524,7 @@ public class AppointmentController : ControllerBase
         {
             return BadRequest(new
             {
-                message =
-                    "Bu saat ucun hekimde artiq qebul movcuddur."
+                message = "Bu saat ucun hekimde artiq qebul movcuddur."
             });
         }
 
@@ -483,8 +532,12 @@ public class AppointmentController : ControllerBase
         appointment.CreatedAt = DateTime.UtcNow;
 
         _context.Appointments.Add(appointment);
-
         await _context.SaveChangesAsync();
+
+        await AddAppointmentNotificationAsync(
+            appointment.PatientId,
+            appointment.Id,
+            appointment.Status);
 
         return CreatedAtAction(
             nameof(GetAppointment),
@@ -498,14 +551,10 @@ public class AppointmentController : ControllerBase
                 appointment.Status,
                 appointment.Notes,
                 appointment.CreatedAt
-            }
-        );
+            });
     }
 
     // PUT: api/appointment/1
-    // Admin -> istediyi appointment
-    // Doctor -> yalniz oz appointmenti
-    // Patient -> yalniz oz appointmenti
     [Authorize(Roles = "Admin,Doctor,Patient")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateAppointment(
@@ -547,9 +596,7 @@ public class AppointmentController : ControllerBase
                     return Forbid();
                 }
 
-                // Patient basqa patient secə bilmez
-                if (existingAppointment.PatientId !=
-                    appointment.PatientId)
+                if (existingAppointment.PatientId != appointment.PatientId)
                 {
                     return Forbid();
                 }
@@ -559,26 +606,21 @@ public class AppointmentController : ControllerBase
                 var currentUserEmail = User.FindFirstValue(
                     ClaimTypes.Email);
 
-                if (existingAppointment.Doctor?.Email !=
-                    currentUserEmail)
+                if (existingAppointment.Doctor?.Email != currentUserEmail)
                 {
                     return Forbid();
                 }
 
-                // Doctor basqa hekim secə bilmez
                 var newDoctor = await _context.Doctors
-                    .FirstOrDefaultAsync(d =>
-                        d.Id == appointment.DoctorId);
+                    .FirstOrDefaultAsync(d => d.Id == appointment.DoctorId);
 
-                if (newDoctor == null ||
-                    newDoctor.Email != currentUserEmail)
+                if (newDoctor == null || newDoctor.Email != currentUserEmail)
                 {
                     return Forbid();
                 }
             }
         }
 
-        // Patient yoxlanisi
         var patientExists = await _context.Patients
             .AnyAsync(p => p.Id == appointment.PatientId);
 
@@ -590,7 +632,6 @@ public class AppointmentController : ControllerBase
             });
         }
 
-        // Doctor yoxlanisi
         var doctorExists = await _context.Doctors
             .AnyAsync(d => d.Id == appointment.DoctorId);
 
@@ -602,20 +643,17 @@ public class AppointmentController : ControllerBase
             });
         }
 
-        // Tarix
         if (appointment.AppointmentDate <= DateTime.Now)
         {
             return BadRequest(new
             {
-                message =
-                    "Qebul vaxti gelecek tarixde olmalidir."
+                message = "Qebul vaxti gelecek tarixde olmalidir."
             });
         }
 
         var dayOfWeek = appointment.AppointmentDate.DayOfWeek;
         var appointmentTime = appointment.AppointmentDate.TimeOfDay;
 
-        // Hekim qrafiki
         var schedule = await _context.DoctorSchedules
             .FirstOrDefaultAsync(s =>
                 s.DoctorId == appointment.DoctorId &&
@@ -626,12 +664,10 @@ public class AppointmentController : ControllerBase
         {
             return BadRequest(new
             {
-                message =
-                    "Hekimin secilen gun ucun is qrafiki yoxdur."
+                message = "Hekimin secilen gun ucun is qrafiki yoxdur."
             });
         }
 
-        // Saat
         if (appointmentTime < schedule.StartTime ||
             appointmentTime >= schedule.EndTime)
         {
@@ -642,7 +678,6 @@ public class AppointmentController : ControllerBase
             });
         }
 
-        // Duplicate
         var duplicateAppointment = await _context.Appointments
             .AnyAsync(a =>
                 a.Id != id &&
@@ -654,44 +689,188 @@ public class AppointmentController : ControllerBase
         {
             return BadRequest(new
             {
-                message =
-                    "Bu saat ucun hekimde artiq qebul movcuddur."
+                message = "Bu saat ucun hekimde artiq qebul movcuddur."
             });
         }
 
-        existingAppointment.PatientId =
-            appointment.PatientId;
+        var oldStatus = existingAppointment.Status;
+        var oldPatientId = existingAppointment.PatientId;
 
-        existingAppointment.DoctorId =
-            appointment.DoctorId;
+        existingAppointment.PatientId = appointment.PatientId;
+        existingAppointment.DoctorId = appointment.DoctorId;
+        existingAppointment.AppointmentDate = appointment.AppointmentDate;
+        existingAppointment.Notes = appointment.Notes;
 
-        existingAppointment.AppointmentDate =
-            appointment.AppointmentDate;
-
-        existingAppointment.Notes =
-            appointment.Notes;
-
-        // Patient statusu deyise bilmez
-        // Doctor ve Admin deyise biler
         if (!User.IsInRole("Patient"))
         {
-            existingAppointment.Status =
-                appointment.Status;
+            existingAppointment.Status = appointment.Status;
         }
 
         await _context.SaveChangesAsync();
 
+        if (!User.IsInRole("Patient") &&
+            !string.Equals(
+                oldStatus,
+                existingAppointment.Status,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            await AddAppointmentNotificationAsync(
+                oldPatientId,
+                existingAppointment.Id,
+                existingAppointment.Status);
+        }
+
         return NoContent();
     }
 
+    // POST: api/appointment/1/complete
+    [Authorize(Roles = "Admin,Doctor")]
+    [HttpPost("{id}/complete")]
+    public async Task<IActionResult> CompleteAppointment(int id)
+    {
+        var appointment = await _context.Appointments
+            .Include(a => a.Doctor)
+            .FirstOrDefaultAsync(a => a.Id == id);
+
+        if (appointment == null)
+        {
+            return NotFound(new
+            {
+                message = "Qebul tapilmadi."
+            });
+        }
+
+        if (User.IsInRole("Doctor"))
+        {
+            var currentUserEmail = User.FindFirstValue(ClaimTypes.Email);
+
+            if (appointment.Doctor?.Email != currentUserEmail)
+            {
+                return Forbid();
+            }
+        }
+
+        if (appointment.Status == "Cancelled")
+        {
+            return BadRequest(new
+            {
+                message = "Legv edilmis qebul tamamlana bilmez."
+            });
+        }
+
+        if (appointment.Status == "Completed")
+        {
+            return BadRequest(new
+            {
+                message = "Bu qebul artiq tamamlanib."
+            });
+        }
+
+        var prescriptionExists = await _context.Prescriptions
+            .AnyAsync(p =>
+                p.PatientId == appointment.PatientId &&
+                p.DoctorId == appointment.DoctorId);
+
+        if (!prescriptionExists)
+        {
+            return BadRequest(new
+            {
+                message = "Evvel pasiyent ucun resept yazilmalidir."
+            });
+        }
+
+        appointment.Status = "Completed";
+        await _context.SaveChangesAsync();
+
+        await AddAppointmentNotificationAsync(
+            appointment.PatientId,
+            appointment.Id,
+            appointment.Status);
+
+        return Ok(new
+        {
+            message = "Qebul ugurla tamamlandi.",
+            appointment.Id,
+            appointment.Status
+        });
+    }
+
+    // POST: api/appointment/1/cancel
+    [Authorize(Roles = "Admin,Doctor,Patient")]
+    [HttpPost("{id}/cancel")]
+    public async Task<IActionResult> CancelAppointment(int id)
+    {
+        var appointment = await _context.Appointments
+            .Include(a => a.Doctor)
+            .Include(a => a.Patient)
+            .FirstOrDefaultAsync(a => a.Id == id);
+
+        if (appointment == null)
+        {
+            return NotFound(new
+            {
+                message = "Qebul tapilmadi."
+            });
+        }
+
+        if (User.IsInRole("Doctor"))
+        {
+            var currentUserEmail = User.FindFirstValue(ClaimTypes.Email);
+
+            if (appointment.Doctor?.Email != currentUserEmail)
+            {
+                return Forbid();
+            }
+        }
+        else if (User.IsInRole("Patient"))
+        {
+            var currentUserId = User.FindFirstValue(
+                ClaimTypes.NameIdentifier);
+
+            if (appointment.Patient?.UserId != currentUserId)
+            {
+                return Forbid();
+            }
+        }
+
+        if (appointment.Status == "Completed")
+        {
+            return BadRequest(new
+            {
+                message = "Tamamlanmis qebul legv edile bilmez."
+            });
+        }
+
+        if (appointment.Status == "Cancelled")
+        {
+            return BadRequest(new
+            {
+                message = "Bu qebul artiq legv edilib."
+            });
+        }
+
+        appointment.Status = "Cancelled";
+        await _context.SaveChangesAsync();
+
+        await AddAppointmentNotificationAsync(
+            appointment.PatientId,
+            appointment.Id,
+            appointment.Status);
+
+        return Ok(new
+        {
+            message = "Qebul ugurla legv edildi.",
+            appointment.Id,
+            appointment.Status
+        });
+    }
+
     // DELETE: api/appointment/1
-    // Yalniz Admin
     [Authorize(Roles = "Admin")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteAppointment(int id)
     {
-        var appointment = await _context.Appointments
-            .FindAsync(id);
+        var appointment = await _context.Appointments.FindAsync(id);
 
         if (appointment == null)
         {
@@ -702,7 +881,6 @@ public class AppointmentController : ControllerBase
         }
 
         _context.Appointments.Remove(appointment);
-
         await _context.SaveChangesAsync();
 
         return NoContent();

@@ -17,4 +17,7 @@ public class Doctor
     public Specialty? Specialty { get; set; }
 
     public bool IsActive { get; set; } = true;
+
+    // Hekimin Identity hesabı ilə əlaqəsi
+    public string? ApplicationUserId { get; set; }
 }

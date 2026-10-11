@@ -1,4 +1,7 @@
+
+using AutoMapper;
 using Hospital.Data;
+using Hospital.DTOs.DoctorSchedule;
 using Hospital.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -7,65 +10,44 @@ namespace Hospital.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Route("api/DoctorSchedules")]
 public class DoctorScheduleController : ControllerBase
 {
     private readonly HospitalDbContext _context;
+    private readonly IMapper _mapper;
 
-    public DoctorScheduleController(HospitalDbContext context)
+    public DoctorScheduleController(
+        HospitalDbContext context,
+        IMapper mapper)
     {
         _context = context;
+        _mapper = mapper;
     }
 
-    // GET: api/doctorschedule
+    // GET: api/DoctorSchedule
+    // GET: api/DoctorSchedules
     [HttpGet]
     public async Task<IActionResult> GetSchedules()
     {
         var schedules = await _context.DoctorSchedules
             .Include(s => s.Doctor)
-            .Select(s => new
-            {
-                s.Id,
-                s.DoctorId,
-                Doctor = s.Doctor == null
-                    ? null
-                    : new
-                    {
-                        s.Doctor.Id,
-                        s.Doctor.FullName
-                    },
-                s.DayOfWeek,
-                s.StartTime,
-                s.EndTime,
-                s.IsAvailable
-            })
+            .OrderBy(s => s.DayOfWeek)
+            .ThenBy(s => s.StartTime)
             .ToListAsync();
 
-        return Ok(schedules);
+        var response =
+            _mapper.Map<List<DoctorScheduleResponseDto>>(schedules);
+
+        return Ok(response);
     }
-    // GET: api/doctorschedule/1
-    [HttpGet("{id}")]
+
+    // GET: api/DoctorSchedule/1
+    [HttpGet("{id:int}")]
     public async Task<IActionResult> GetSchedule(int id)
     {
         var schedule = await _context.DoctorSchedules
             .Include(s => s.Doctor)
-            .Where(s => s.Id == id)
-            .Select(s => new
-            {
-                s.Id,
-                s.DoctorId,
-                Doctor = s.Doctor == null
-                    ? null
-                    : new
-                    {
-                        s.Doctor.Id,
-                        s.Doctor.FullName
-                    },
-                s.DayOfWeek,
-                s.StartTime,
-                s.EndTime,
-                s.IsAvailable
-            })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(s => s.Id == id);
 
         if (schedule == null)
         {
@@ -75,11 +57,14 @@ public class DoctorScheduleController : ControllerBase
             });
         }
 
-        return Ok(schedule);
+        var response =
+            _mapper.Map<DoctorScheduleResponseDto>(schedule);
+
+        return Ok(response);
     }
 
-    // GET: api/doctorschedule/doctor/1
-    [HttpGet("doctor/{doctorId}")]
+    // GET: api/DoctorSchedule/doctor/1
+    [HttpGet("doctor/{doctorId:int}")]
     public async Task<IActionResult> GetDoctorSchedules(int doctorId)
     {
         var doctorExists = await _context.Doctors
@@ -94,30 +79,34 @@ public class DoctorScheduleController : ControllerBase
         }
 
         var schedules = await _context.DoctorSchedules
+            .Include(s => s.Doctor)
             .Where(s => s.DoctorId == doctorId)
             .OrderBy(s => s.DayOfWeek)
             .ThenBy(s => s.StartTime)
-            .Select(s => new
-            {
-                s.Id,
-                s.DoctorId,
-                s.DayOfWeek,
-                s.StartTime,
-                s.EndTime,
-                s.IsAvailable
-            })
             .ToListAsync();
 
-        return Ok(schedules);
+        var response =
+            _mapper.Map<List<DoctorScheduleResponseDto>>(schedules);
+
+        return Ok(response);
     }
 
-    // POST: api/doctorschedule
+    // POST: api/DoctorSchedule
+    // POST: api/DoctorSchedules
     [HttpPost]
     public async Task<IActionResult> CreateSchedule(
-        DoctorSchedule schedule)
+        [FromBody] DoctorScheduleCreateDto dto)
     {
+        if (dto.StartTime >= dto.EndTime)
+        {
+            return BadRequest(new
+            {
+                message = "Baslangic saati bitis saatindan kicik olmalidir."
+            });
+        }
+
         var doctorExists = await _context.Doctors
-            .AnyAsync(d => d.Id == schedule.DoctorId);
+            .AnyAsync(d => d.Id == dto.DoctorId);
 
         if (!doctorExists)
         {
@@ -127,18 +116,10 @@ public class DoctorScheduleController : ControllerBase
             });
         }
 
-        if (schedule.StartTime >= schedule.EndTime)
-        {
-            return BadRequest(new
-            {
-                message = "Baslangic saati bitis saatindan kicik olmalidir."
-            });
-        }
-
         var scheduleExists = await _context.DoctorSchedules
             .AnyAsync(s =>
-                s.DoctorId == schedule.DoctorId &&
-                s.DayOfWeek == schedule.DayOfWeek);
+                s.DoctorId == dto.DoctorId &&
+                s.DayOfWeek == dto.DayOfWeek);
 
         if (scheduleExists)
         {
@@ -148,41 +129,34 @@ public class DoctorScheduleController : ControllerBase
             });
         }
 
-        _context.DoctorSchedules.Add(schedule);
+        var schedule = _mapper.Map<DoctorSchedule>(dto);
 
+        _context.DoctorSchedules.Add(schedule);
         await _context.SaveChangesAsync();
+
+        var createdSchedule = await _context.DoctorSchedules
+            .Include(s => s.Doctor)
+            .FirstAsync(s => s.Id == schedule.Id);
+
+        var response =
+            _mapper.Map<DoctorScheduleResponseDto>(createdSchedule);
 
         return CreatedAtAction(
             nameof(GetSchedule),
             new { id = schedule.Id },
-            new
-            {
-                schedule.Id,
-                schedule.DoctorId,
-                schedule.DayOfWeek,
-                schedule.StartTime,
-                schedule.EndTime,
-                schedule.IsAvailable
-            }
+            response
         );
     }
 
-    // PUT: api/doctorschedule/1
-    [HttpPut("{id}")]
+    // PUT: api/DoctorSchedule/1
+    // PUT: api/DoctorSchedules/1
+    [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateSchedule(
         int id,
-        DoctorSchedule schedule)
+        [FromBody] DoctorScheduleUpdateDto dto)
     {
-        if (id != schedule.Id)
-        {
-            return BadRequest(new
-            {
-                message = "ID uygun gelmir."
-            });
-        }
-
         var existingSchedule = await _context.DoctorSchedules
-            .FindAsync(id);
+            .FirstOrDefaultAsync(s => s.Id == id);
 
         if (existingSchedule == null)
         {
@@ -192,18 +166,7 @@ public class DoctorScheduleController : ControllerBase
             });
         }
 
-        var doctorExists = await _context.Doctors
-            .AnyAsync(d => d.Id == schedule.DoctorId);
-
-        if (!doctorExists)
-        {
-            return BadRequest(new
-            {
-                message = "Gosterilen hekim movcud deyil."
-            });
-        }
-
-        if (schedule.StartTime >= schedule.EndTime)
+        if (dto.StartTime >= dto.EndTime)
         {
             return BadRequest(new
             {
@@ -214,8 +177,8 @@ public class DoctorScheduleController : ControllerBase
         var duplicateSchedule = await _context.DoctorSchedules
             .AnyAsync(s =>
                 s.Id != id &&
-                s.DoctorId == schedule.DoctorId &&
-                s.DayOfWeek == schedule.DayOfWeek);
+                s.DoctorId == existingSchedule.DoctorId &&
+                s.DayOfWeek == dto.DayOfWeek);
 
         if (duplicateSchedule)
         {
@@ -225,19 +188,16 @@ public class DoctorScheduleController : ControllerBase
             });
         }
 
-        existingSchedule.DoctorId = schedule.DoctorId;
-        existingSchedule.DayOfWeek = schedule.DayOfWeek;
-        existingSchedule.StartTime = schedule.StartTime;
-        existingSchedule.EndTime = schedule.EndTime;
-        existingSchedule.IsAvailable = schedule.IsAvailable;
+        _mapper.Map(dto, existingSchedule);
 
         await _context.SaveChangesAsync();
 
         return NoContent();
     }
 
-    // DELETE: api/doctorschedule/1
-    [HttpDelete("{id}")]
+    // DELETE: api/DoctorSchedule/1
+    // DELETE: api/DoctorSchedules/1
+    [HttpDelete("{id:int}")]
     public async Task<IActionResult> DeleteSchedule(int id)
     {
         var schedule = await _context.DoctorSchedules
