@@ -1,5 +1,5 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
-
+import LiveTranslation from "./components/LiveTranslation";
 import RequireAdmin from "./components/auth/RequireAdmin";
 import ScrollToTop from "./components/ScrollToTop";
 
@@ -59,7 +59,7 @@ function App() {
   return (
     <BrowserRouter>
       <ScrollToTop />
-
+      <LiveTranslation />
       <Routes>
         {/* PUBLIC PAGES */}
         <Route element={<PublicLayout />}>
@@ -138,6 +138,10 @@ function App() {
             element={<PatientBookAppointment />}
           />
           <Route path="doctors" element={<PatientDoctors />} />
+          <Route
+          path="doctors/:id"
+          element={<DoctorDetails />}
+          />
           <Route
             path="medical-history"
             element={<PatientMedicalHistory />}

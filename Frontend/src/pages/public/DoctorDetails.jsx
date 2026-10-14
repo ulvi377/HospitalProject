@@ -139,9 +139,12 @@ export default function DoctorDetails() {
         setAverageRating(0);
         setTotalRatings(0);
 
-        // Həkim profilini slug vasitəsilə yüklə
-        const doctorResponse = await api.get(
-          `/Doctors/by-slug/${encodeURIComponent(id)}`
+       const isNumericId = /^\d+$/.test(String(id));
+
+       const doctorResponse = await api.get(
+       isNumericId
+        ? `/Doctors/${encodeURIComponent(id)}`
+        : `/Doctors/by-slug/${encodeURIComponent(id)}`
         );
 
         if (cancelled) return;

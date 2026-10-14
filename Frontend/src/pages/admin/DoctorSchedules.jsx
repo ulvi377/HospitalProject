@@ -32,12 +32,38 @@ const dayNameToNumber = {
   Saturday: 6,
 };
 
+function getValue(obj, ...keys) {
+  for (const key of keys) {
+    if (
+      obj?.[key] !== undefined &&
+      obj?.[key] !== null &&
+      obj[key] !== ""
+    ) {
+      return obj[key];
+    }
+  }
+
+  return null;
+}
+
+function getDoctorId(schedule) {
+  return (
+    getValue(schedule, "doctorId", "DoctorId") ??
+    getValue(schedule?.doctor, "id", "Id")
+  );
+}
+
 function getDoctorName(schedule) {
   return (
-    schedule.doctor?.fullName ||
-    schedule.doctorName ||
-    schedule.doctor?.name ||
-    `Həkim #${schedule.doctorId ?? schedule.doctor?.id ?? ""}`
+    getValue(
+      schedule?.doctor,
+      "fullName",
+      "FullName",
+      "name",
+      "Name"
+    ) ||
+    getValue(schedule, "doctorName", "DoctorName") ||
+    `Həkim #${getDoctorId(schedule) ?? ""}`
   );
 }
 
@@ -52,7 +78,12 @@ function getDayNumber(value) {
 
   const normalized = String(value).trim();
 
-  if (Object.prototype.hasOwnProperty.call(dayNameToNumber, normalized)) {
+  if (
+    Object.prototype.hasOwnProperty.call(
+      dayNameToNumber,
+      normalized
+    )
+  ) {
     return dayNameToNumber[normalized];
   }
 
@@ -74,7 +105,10 @@ function getDayNumber(value) {
 }
 
 function getDayLabel(value) {
-  const day = days.find((item) => item.value === getDayNumber(value));
+  const day = days.find(
+    (item) => item.value === getDayNumber(value)
+  );
+
   return day?.label || "—";
 }
 
@@ -117,6 +151,14 @@ function getErrorMessage(err) {
     return "Göndərilən məlumatlar yanlışdır. Gün və saatları yoxla.";
   }
 
+  if (err.response?.status === 401) {
+    return "Sessiyanın vaxtı bitib. Yenidən daxil ol.";
+  }
+
+  if (err.response?.status === 403) {
+    return "Bu əməliyyat üçün icazən yoxdur.";
+  }
+
   return "Əməliyyat alınmadı. Backend bağlantısını yoxla.";
 }
 
@@ -145,11 +187,19 @@ export default function DoctorSchedules() {
 
       const scheduleData = Array.isArray(scheduleResult)
         ? scheduleResult
-        : scheduleResult?.$values ?? scheduleResult?.items ?? [];
+        : scheduleResult?.$values ??
+          scheduleResult?.items ??
+          scheduleResult?.Items ??
+          [];
 
-      const doctorData = Array.isArray(doctorResult.data)
-        ? doctorResult.data
-        : doctorResult.data?.$values ?? doctorResult.data?.items ?? [];
+      const responseData = doctorResult.data;
+
+      const doctorData = Array.isArray(responseData)
+        ? responseData
+        : responseData?.$values ??
+          responseData?.items ??
+          responseData?.Items ??
+          [];
 
       setSchedules(scheduleData);
       setDoctors(doctorData);
@@ -170,19 +220,30 @@ export default function DoctorSchedules() {
 
     return schedules.filter((schedule) => {
       const doctorName = getDoctorName(schedule).toLowerCase();
+
+      const doctorId = String(
+        getDoctorId(schedule) ?? ""
+      ).toLowerCase();
+
       const dayValue = getDayNumber(
-        schedule.dayOfWeek ?? schedule.day ?? schedule.weekDay
+        schedule.dayOfWeek ??
+          schedule.DayOfWeek ??
+          schedule.day ??
+          schedule.Day ??
+          schedule.weekDay
       );
+
       const dayLabel = getDayLabel(dayValue).toLowerCase();
 
       const matchesSearch =
         !term ||
         doctorName.includes(term) ||
-        String(schedule.doctorId ?? "").includes(term) ||
+        doctorId.includes(term) ||
         dayLabel.includes(term);
 
       const matchesDay =
-        dayFilter === "" || dayValue === Number(dayFilter);
+        dayFilter === "" ||
+        dayValue === Number(dayFilter);
 
       return matchesSearch && matchesDay;
     });
@@ -190,30 +251,47 @@ export default function DoctorSchedules() {
 
   function openCreateModal() {
     setEditingId(null);
+
     setForm({
       ...emptyForm,
-      doctorId: doctors[0]?.id ? String(doctors[0].id) : "",
+      doctorId: doctors[0]
+        ? String(getValue(doctors[0], "id", "Id") ?? "")
+        : "",
     });
+
     setError("");
     setSuccess("");
     setModalOpen(true);
   }
 
   function openEditModal(schedule) {
-    setEditingId(schedule.id);
+    setEditingId(getValue(schedule, "id", "Id"));
 
     setForm({
-      doctorId: String(schedule.doctorId ?? schedule.doctor?.id ?? ""),
+      doctorId: String(getDoctorId(schedule) ?? ""),
       dayOfWeek: getDayNumber(
-        schedule.dayOfWeek ?? schedule.day ?? schedule.weekDay
+        schedule.dayOfWeek ??
+          schedule.DayOfWeek ??
+          schedule.day ??
+          schedule.Day ??
+          schedule.weekDay
       ),
       startTime: getTime(
-        schedule.startTime ?? schedule.start ?? schedule.fromTime
+        schedule.startTime ??
+          schedule.StartTime ??
+          schedule.start ??
+          schedule.fromTime
       ),
       endTime: getTime(
-        schedule.endTime ?? schedule.end ?? schedule.toTime
+        schedule.endTime ??
+          schedule.EndTime ??
+          schedule.end ??
+          schedule.toTime
       ),
-      isAvailable: schedule.isAvailable ?? true,
+      isAvailable:
+        schedule.isAvailable ??
+        schedule.IsAvailable ??
+        true,
     });
 
     setError("");
@@ -261,15 +339,14 @@ export default function DoctorSchedules() {
 
     try {
       if (editingId !== null) {
-        // Update DTO-da doctorId və id yoxdur.
         await doctorScheduleService.update(editingId, payload);
         setSuccess("Həkim qrafiki yeniləndi.");
       } else {
-        // Create DTO üçün doctorId də göndərilir.
         await doctorScheduleService.create({
           doctorId: Number(form.doctorId),
           ...payload,
         });
+
         setSuccess("Yeni həkim qrafiki yaradıldı.");
       }
 
@@ -280,6 +357,7 @@ export default function DoctorSchedules() {
         "DoctorSchedule sorğusunun xətası:",
         err.response?.data ?? err
       );
+
       setError(getErrorMessage(err));
     } finally {
       setSaving(false);
@@ -287,6 +365,8 @@ export default function DoctorSchedules() {
   }
 
   async function handleDelete(schedule) {
+    const scheduleId = getValue(schedule, "id", "Id");
+
     const confirmed = window.confirm(
       `${getDoctorName(schedule)} üçün bu qrafiki silmək istəyirsən?`
     );
@@ -297,10 +377,14 @@ export default function DoctorSchedules() {
     setSuccess("");
 
     try {
-      await doctorScheduleService.delete(schedule.id);
+      await doctorScheduleService.delete(scheduleId);
 
       setSchedules((previous) =>
-        previous.filter((item) => item.id !== schedule.id)
+        previous.filter(
+          (item) =>
+            String(getValue(item, "id", "Id")) !==
+            String(scheduleId)
+        )
       );
 
       setSuccess("Qrafik uğurla silindi.");
@@ -311,7 +395,7 @@ export default function DoctorSchedules() {
   }
 
   const activeDoctorCount = new Set(
-    schedules.map((schedule) => schedule.doctorId ?? schedule.doctor?.id)
+    schedules.map((schedule) => getDoctorId(schedule))
   ).size;
 
   return (
@@ -398,7 +482,7 @@ export default function DoctorSchedules() {
             <span>⌕</span>
             <input
               type="text"
-              placeholder="Həkim və ya gün üzrə axtar..."
+              placeholder="Həkim adı, ID və ya gün üzrə axtar..."
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
@@ -446,15 +530,23 @@ export default function DoctorSchedules() {
               <tbody>
                 {filteredSchedules.map((schedule) => {
                   const name = getDoctorName(schedule);
+
                   const start = getTime(
-                    schedule.startTime ?? schedule.start ?? schedule.fromTime
+                    schedule.startTime ??
+                      schedule.StartTime ??
+                      schedule.start ??
+                      schedule.fromTime
                   );
+
                   const end = getTime(
-                    schedule.endTime ?? schedule.end ?? schedule.toTime
+                    schedule.endTime ??
+                      schedule.EndTime ??
+                      schedule.end ??
+                      schedule.toTime
                   );
 
                   return (
-                    <tr key={schedule.id}>
+                    <tr key={getValue(schedule, "id", "Id")}>
                       <td>
                         <div className="ds-doctor">
                           <div className="ds-avatar">
@@ -463,8 +555,7 @@ export default function DoctorSchedules() {
                           <div>
                             <strong>{name}</strong>
                             <small>
-                              Həkim ID:{" "}
-                              {schedule.doctorId ?? schedule.doctor?.id ?? "—"}
+                              Həkim ID: {getDoctorId(schedule) ?? "—"}
                             </small>
                           </div>
                         </div>
@@ -474,7 +565,9 @@ export default function DoctorSchedules() {
                         <span className="ds-day">
                           {getDayLabel(
                             schedule.dayOfWeek ??
+                              schedule.DayOfWeek ??
                               schedule.day ??
+                              schedule.Day ??
                               schedule.weekDay
                           )}
                         </span>
@@ -490,7 +583,8 @@ export default function DoctorSchedules() {
 
                       <td>
                         <span className="ds-day">
-                          {schedule.isAvailable === false
+                          {schedule.isAvailable === false ||
+                          schedule.IsAvailable === false
                             ? "Deaktiv"
                             : "Aktiv"}
                         </span>
@@ -532,7 +626,10 @@ export default function DoctorSchedules() {
         <div
           className="ds-modal-overlay"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !saving) {
+            if (
+              event.target === event.currentTarget &&
+              !saving
+            ) {
               setModalOpen(false);
             }
           }}
@@ -580,13 +677,24 @@ export default function DoctorSchedules() {
                     required
                   >
                     <option value="">Həkim seç</option>
-                    {doctors.map((doctor) => (
-                      <option key={doctor.id} value={doctor.id}>
-                        {doctor.fullName ||
-                          doctor.name ||
-                          `Həkim #${doctor.id}`}
-                      </option>
-                    ))}
+
+                    {doctors.map((doctor) => {
+                      const doctorId = getValue(doctor, "id", "Id");
+                      const doctorName =
+                        getValue(
+                          doctor,
+                          "fullName",
+                          "FullName",
+                          "name",
+                          "Name"
+                        ) || `Həkim #${doctorId}`;
+
+                      return (
+                        <option key={doctorId} value={doctorId}>
+                          {doctorName}
+                        </option>
+                      );
+                    })}
                   </select>
                 </label>
               )}

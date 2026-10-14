@@ -650,7 +650,9 @@ export default function Doctors() {
                       <button
                         type="button"
                         onClick={() => openDoctorProfile(doctor)}
-                        className="flex w-full items-center justify-between rounded-xl bg-slate-50 px-4 py-3.5 text-sm font-bold text-[#102b4e] transition hover:bg-blue-700 hover:text-white focus:outline-none focus:ring-4 focus:ring-blue-100"
+                       
+                            className="flex w-full items-center justify-between rounded-xl bg-blue-700 px-4 py-3.5 text-sm font-bold text-white transition hover:bg-blue-800 hover:text-white focus:outline-none focus:ring-4 focus:ring-blue-200"
+
                       >
                         <span className="flex items-center gap-2">
                           <UserRound className="h-4 w-4" />

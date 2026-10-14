@@ -1259,3 +1259,47 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Seçilmiş ağrı nöqtəsinin qırmızı göstəricisi */
+.pain-legend-dot {
+  background: #ff2020 !important;
+  box-shadow: 0 0 0 4px rgba(255, 32, 32, 0.13);
+}
+
+/* Həkim seçimi düyməsi */
+.pain-doctor-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 24px;
+  padding: 15px 20px;
+  border: none;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #087fba, #075985);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.pain-doctor-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(7, 89, 133, 0.2);
+}
+
+.pain-doctor-button:focus-visible {
+  outline: 3px solid #7dd3fc;
+  outline-offset: 3px;
+}
+
+@media (max-width: 600px) {
+  .pain-doctor-button {
+    padding: 13px 12px;
+    font-size: 14px;
+  }
+}

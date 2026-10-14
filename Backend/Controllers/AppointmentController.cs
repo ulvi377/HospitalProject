@@ -2,6 +2,7 @@
 using System.Security.Claims;
 using Hospital.Data;
 using Hospital.Models;
+using Hospital.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -15,16 +16,19 @@ public class AppointmentController : ControllerBase
 {
     private readonly HospitalDbContext _context;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IEmailService _emailService;
 
     public AppointmentController(
         HospitalDbContext context,
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        IEmailService emailService)
     {
         _context = context;
         _userManager = userManager;
+        _emailService = emailService;
     }
 
-    // Bildiris yaratmaq ucun komekci metod
+    // Bildiris yaratmaq
     private async Task AddAppointmentNotificationAsync(
         int patientId,
         int appointmentId,
@@ -76,6 +80,95 @@ public class AppointmentController : ControllerBase
         });
 
         await _context.SaveChangesAsync();
+    }
+
+    // Qebul statusuna gore pasiyente email gonder
+    private async Task SendAppointmentStatusEmailAsync(
+        int appointmentId,
+        string status)
+    {
+        var normalizedStatus = status.Trim().ToLowerInvariant();
+
+        if (normalizedStatus != "confirmed" &&
+            normalizedStatus != "completed" &&
+            normalizedStatus != "cancelled")
+        {
+            return;
+        }
+
+        try
+        {
+            var appointment = await _context.Appointments
+                .Include(a => a.Patient)
+                .Include(a => a.Doctor)
+                .FirstOrDefaultAsync(a => a.Id == appointmentId);
+
+            if (appointment?.Patient == null ||
+                appointment.Doctor == null ||
+                string.IsNullOrWhiteSpace(appointment.Patient.UserId))
+            {
+                Console.Error.WriteLine(
+                    $"Qebul {appointmentId}: pasiyent ve ya hekim tapilmadi.");
+                return;
+            }
+
+            var user = await _userManager.FindByIdAsync(
+                appointment.Patient.UserId);
+
+            if (user == null ||
+                string.IsNullOrWhiteSpace(user.Email))
+            {
+                Console.Error.WriteLine(
+                    $"Qebul {appointmentId}: pasiyentin emaili tapilmadi.");
+                return;
+            }
+
+            string subject;
+            string message;
+
+            switch (normalizedStatus)
+            {
+                case "confirmed":
+                    subject = "Avropa Hospital - Qebulunuz tesdiqlendi";
+                    message = "Hekim qebulunuzu tesdiq etdi.";
+                    break;
+
+                case "completed":
+                    subject = "Avropa Hospital - Qebulunuz tamamlandi";
+                    message = "Hekim qebulunuzu tamamlanmis kimi qeyd etdi.";
+                    break;
+
+                case "cancelled":
+                    subject = "Avropa Hospital - Qebulunuz legv edildi";
+                    message = "Qebulunuz legv edildi.";
+                    break;
+
+                default:
+                    return;
+            }
+
+            var body =
+                $"Salam, {appointment.Patient.FullName}!\n\n" +
+                $"{message}\n\n" +
+                $"Hekim: {appointment.Doctor.FullName}\n" +
+                $"Qebul tarixi: {appointment.AppointmentDate:dd.MM.yyyy HH:mm}\n" +
+                $"Status: {appointment.Status}\n\n" +
+                "Avropa Hospital";
+
+            await _emailService.SendEmailAsync(
+                user.Email,
+                subject,
+                body);
+
+            Console.WriteLine(
+                $"Qebul {appointmentId} ucun email gonderildi.");
+        }
+        catch (Exception ex)
+        {
+            // Email xetasi qebul statusunun saxlanmasina mane olmasin.
+            Console.Error.WriteLine(
+                $"Qebul emaili gonderile bilmedi: {ex.Message}");
+        }
     }
 
     // GET: api/appointment
@@ -438,7 +531,8 @@ public class AppointmentController : ControllerBase
 
         if (isDoctor && !isAdmin)
         {
-            var currentUserEmail = User.FindFirstValue(ClaimTypes.Email);
+            var currentUserEmail = User.FindFirstValue(
+                ClaimTypes.Email);
 
             var doctor = await _context.Doctors
                 .FirstOrDefaultAsync(d => d.Id == appointment.DoctorId);
@@ -572,13 +666,12 @@ public class AppointmentController : ControllerBase
             });
     }
 
- 
-// PUT: api/appointment/1
-[Authorize(Roles = "Admin,Doctor,Patient")]
-[HttpPut("{id}")]
-public async Task<IActionResult> UpdateAppointment(
-    int id,
-    [FromBody] Appointment appointment)
+    // PUT: api/appointment/1
+    [Authorize(Roles = "Admin,Doctor,Patient")]
+    [HttpPut("{id}")]
+    public async Task<IActionResult> UpdateAppointment(
+        int id,
+        [FromBody] Appointment appointment)
     {
         var existingAppointment = await _context.Appointments
             .Include(a => a.Doctor)
@@ -627,8 +720,7 @@ public async Task<IActionResult> UpdateAppointment(
 
         var oldStatus = existingAppointment.Status;
 
-        // Yalnız status dəyişdirilir.
-        // Digər sahələr mövcud dəyərlərində qalır.
+        // Pasiyent statusu deyise bilmez.
         if (!isPatient)
         {
             if (string.IsNullOrWhiteSpace(appointment.Status))
@@ -641,11 +733,11 @@ public async Task<IActionResult> UpdateAppointment(
 
             var allowedStatuses = new[]
             {
-            "Pending",
-            "Confirmed",
-            "Completed",
-            "Cancelled"
-        };
+                "Pending",
+                "Confirmed",
+                "Completed",
+                "Cancelled"
+            };
 
             var newStatus = allowedStatuses.FirstOrDefault(
                 s => string.Equals(
@@ -676,6 +768,10 @@ public async Task<IActionResult> UpdateAppointment(
                 existingAppointment.PatientId,
                 existingAppointment.Id,
                 existingAppointment.Status);
+
+            await SendAppointmentStatusEmailAsync(
+                existingAppointment.Id,
+                existingAppointment.Status);
         }
 
         return Ok(new
@@ -689,7 +785,6 @@ public async Task<IActionResult> UpdateAppointment(
             existingAppointment.CreatedAt
         });
     }
-
 
     // POST: api/appointment/1/complete
     [Authorize(Roles = "Admin,Doctor")]
@@ -710,7 +805,8 @@ public async Task<IActionResult> UpdateAppointment(
 
         if (User.IsInRole("Doctor"))
         {
-            var currentUserEmail = User.FindFirstValue(ClaimTypes.Email);
+            var currentUserEmail = User.FindFirstValue(
+                ClaimTypes.Email);
 
             if (appointment.Doctor?.Email != currentUserEmail)
             {
@@ -755,6 +851,10 @@ public async Task<IActionResult> UpdateAppointment(
             appointment.Id,
             appointment.Status);
 
+        await SendAppointmentStatusEmailAsync(
+            appointment.Id,
+            appointment.Status);
+
         return Ok(new
         {
             message = "Qebul ugurla tamamlandi.",
@@ -783,7 +883,8 @@ public async Task<IActionResult> UpdateAppointment(
 
         if (User.IsInRole("Doctor"))
         {
-            var currentUserEmail = User.FindFirstValue(ClaimTypes.Email);
+            var currentUserEmail = User.FindFirstValue(
+                ClaimTypes.Email);
 
             if (appointment.Doctor?.Email != currentUserEmail)
             {
@@ -825,6 +926,10 @@ public async Task<IActionResult> UpdateAppointment(
             appointment.Id,
             appointment.Status);
 
+        await SendAppointmentStatusEmailAsync(
+            appointment.Id,
+            appointment.Status);
+
         return Ok(new
         {
             message = "Qebul ugurla legv edildi.",
@@ -838,7 +943,8 @@ public async Task<IActionResult> UpdateAppointment(
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteAppointment(int id)
     {
-        var appointment = await _context.Appointments.FindAsync(id);
+        var appointment = await _context.Appointments
+            .FindAsync(id);
 
         if (appointment == null)
         {

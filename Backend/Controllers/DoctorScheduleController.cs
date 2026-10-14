@@ -1,8 +1,9 @@
-
+using System.Security.Claims;
 using AutoMapper;
 using Hospital.Data;
 using Hospital.DTOs.DoctorSchedule;
 using Hospital.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +12,7 @@ namespace Hospital.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Route("api/DoctorSchedules")]
+[Authorize]
 public class DoctorScheduleController : ControllerBase
 {
     private readonly HospitalDbContext _context;
@@ -25,7 +27,8 @@ public class DoctorScheduleController : ControllerBase
     }
 
     // GET: api/DoctorSchedule
-    // GET: api/DoctorSchedules
+    // Yalniz Admin butun hekimlerin qrafiklerini gore biler.
+    [Authorize(Roles = "Admin")]
     [HttpGet]
     public async Task<IActionResult> GetSchedules()
     {
@@ -41,7 +44,38 @@ public class DoctorScheduleController : ControllerBase
         return Ok(response);
     }
 
+    // GET: api/DoctorSchedule/my
+    // Hekim yalniz oz qrafikini gore biler.
+    [Authorize(Roles = "Doctor")]
+    [HttpGet("my")]
+    public async Task<IActionResult> GetMySchedules()
+    {
+        var doctorId = await GetCurrentDoctorIdAsync();
+
+        if (doctorId == null)
+        {
+            return NotFound(new
+            {
+                message = "Bu hesaba uygun hekim profili tapilmadi."
+            });
+        }
+
+        var schedules = await _context.DoctorSchedules
+            .Include(s => s.Doctor)
+            .Where(s => s.DoctorId == doctorId.Value)
+            .OrderBy(s => s.DayOfWeek)
+            .ThenBy(s => s.StartTime)
+            .ToListAsync();
+
+        var response =
+            _mapper.Map<List<DoctorScheduleResponseDto>>(schedules);
+
+        return Ok(response);
+    }
+
     // GET: api/DoctorSchedule/1
+    // Qrafikin ID-si ile baxmaq yalniz Admin ucundur.
+    [Authorize(Roles = "Admin")]
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetSchedule(int id)
     {
@@ -63,10 +97,32 @@ public class DoctorScheduleController : ControllerBase
         return Ok(response);
     }
 
-    // GET: api/DoctorSchedule/doctor/1
-    [HttpGet("doctor/{doctorId:int}")]
-    public async Task<IActionResult> GetDoctorSchedules(int doctorId)
+   
+
+// GET: api/DoctorSchedules/doctor/1
+[Authorize(Roles = "Admin,Doctor,Patient")]
+[HttpGet("doctor/{doctorId:int}")]
+public async Task<IActionResult> GetDoctorSchedules(int doctorId)
     {
+        // Doctor yalniz oz qrafikine baxa biler.
+        if (User.IsInRole("Doctor"))
+        {
+            var currentDoctorId = await GetCurrentDoctorIdAsync();
+
+            if (currentDoctorId == null)
+            {
+                return NotFound(new
+                {
+                    message = "Bu hesaba uygun hekim profili tapilmadi."
+                });
+            }
+
+            if (currentDoctorId.Value != doctorId)
+            {
+                return Forbid();
+            }
+        }
+
         var doctorExists = await _context.Doctors
             .AnyAsync(d => d.Id == doctorId);
 
@@ -92,7 +148,8 @@ public class DoctorScheduleController : ControllerBase
     }
 
     // POST: api/DoctorSchedule
-    // POST: api/DoctorSchedules
+    // Qrafiki yalniz Admin yarada biler.
+    [Authorize(Roles = "Admin")]
     [HttpPost]
     public async Task<IActionResult> CreateSchedule(
         [FromBody] DoctorScheduleCreateDto dto)
@@ -101,7 +158,8 @@ public class DoctorScheduleController : ControllerBase
         {
             return BadRequest(new
             {
-                message = "Baslangic saati bitis saatindan kicik olmalidir."
+                message =
+                    "Baslangic saati bitis saatindan kicik olmalidir."
             });
         }
 
@@ -125,13 +183,15 @@ public class DoctorScheduleController : ControllerBase
         {
             return BadRequest(new
             {
-                message = "Bu hekim ucun bu gun artiq is qrafiki movcuddur."
+                message =
+                    "Bu hekim ucun bu gun artiq is qrafiki movcuddur."
             });
         }
 
         var schedule = _mapper.Map<DoctorSchedule>(dto);
 
         _context.DoctorSchedules.Add(schedule);
+
         await _context.SaveChangesAsync();
 
         var createdSchedule = await _context.DoctorSchedules
@@ -149,7 +209,8 @@ public class DoctorScheduleController : ControllerBase
     }
 
     // PUT: api/DoctorSchedule/1
-    // PUT: api/DoctorSchedules/1
+    // Qrafiki yalniz Admin deyise biler.
+    [Authorize(Roles = "Admin")]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateSchedule(
         int id,
@@ -170,7 +231,8 @@ public class DoctorScheduleController : ControllerBase
         {
             return BadRequest(new
             {
-                message = "Baslangic saati bitis saatindan kicik olmalidir."
+                message =
+                    "Baslangic saati bitis saatindan kicik olmalidir."
             });
         }
 
@@ -184,7 +246,8 @@ public class DoctorScheduleController : ControllerBase
         {
             return BadRequest(new
             {
-                message = "Bu hekim ucun bu gun artiq is qrafiki movcuddur."
+                message =
+                    "Bu hekim ucun bu gun artiq is qrafiki movcuddur."
             });
         }
 
@@ -196,7 +259,8 @@ public class DoctorScheduleController : ControllerBase
     }
 
     // DELETE: api/DoctorSchedule/1
-    // DELETE: api/DoctorSchedules/1
+    // Qrafiki yalniz Admin sile biler.
+    [Authorize(Roles = "Admin")]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> DeleteSchedule(int id)
     {
@@ -216,5 +280,45 @@ public class DoctorScheduleController : ControllerBase
         await _context.SaveChangesAsync();
 
         return NoContent();
+    }
+
+    // Daxil olan hekim hesabinin DoctorId-sini tapir.
+    private async Task<int?> GetCurrentDoctorIdAsync()
+    {
+        var email =
+            User.FindFirstValue(ClaimTypes.Email) ??
+            User.FindFirstValue("email");
+
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            var doctorId = await _context.Doctors
+                .Where(d => d.Email == email)
+                .Select(d => (int?)d.Id)
+                .FirstOrDefaultAsync();
+
+            if (doctorId.HasValue)
+            {
+                return doctorId.Value;
+            }
+        }
+
+        var userId =
+            User.FindFirstValue(ClaimTypes.NameIdentifier) ??
+            User.FindFirstValue("sub");
+
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            var doctorId = await _context.Doctors
+                .Where(d => d.ApplicationUserId == userId)
+                .Select(d => (int?)d.Id)
+                .FirstOrDefaultAsync();
+
+            if (doctorId.HasValue)
+            {
+                return doctorId.Value;
+            }
+        }
+
+        return null;
     }
 }

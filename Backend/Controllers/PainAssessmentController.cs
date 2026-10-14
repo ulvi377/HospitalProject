@@ -455,13 +455,21 @@ public class PainAssessmentController : ControllerBase
 
         try
         {
+            var language = string.Equals(
+    request.Language,
+    "en",
+    StringComparison.OrdinalIgnoreCase)
+        ? "en"
+        : "az";
+
             var analysis = await _geminiService.AnalyzeAsync(
                 request.BodyPart.Trim(),
                 request.PainLevel,
                 request.Symptoms,
                 request.Description,
                 request.Duration,
-                cancellationToken);
+                cancellationToken,
+                language);
 
             return Ok(new
             {
@@ -520,4 +528,5 @@ public class PainAnalysisRequest
     public string? Description { get; set; }
 
     public string? Duration { get; set; }
+    public string? Language { get; set; } = "az";
 }

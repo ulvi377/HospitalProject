@@ -21,12 +21,13 @@ public class GeminiPainAnalysisService
     }
 
     public async Task<string> AnalyzeAsync(
-        string bodyPart,
-        int painLevel,
-        string? symptoms,
-        string? description,
-        string? duration,
-        CancellationToken cancellationToken = default)
+    string bodyPart,
+    int painLevel,
+    string? symptoms,
+    string? description,
+    string? duration,
+    CancellationToken cancellationToken = default,
+    string? language = "az")
     {
         var apiKey = _configuration["Gemini:ApiKey"];
 
@@ -36,34 +37,42 @@ public class GeminiPainAnalysisService
                 "Gemini API acari tapilmadi. User Secrets konfiqurasiyasini yoxla.");
         }
 
+var responseLanguage = string.Equals(
+    language,
+    "en",
+    StringComparison.OrdinalIgnoreCase)
+        ? "English"
+        : "Azerbaijani";
+
         var prompt = $"""
-        Sen tibbi melumatlandirma ucun nezerde tutulmus AI komekchisisən.
-        Azerbaycan dilinde aydin, duzgun ve tam cavab ver.
+You are an AI assistant providing general medical information.
+Respond clearly, accurately, and completely in {responseLanguage}.
 
-        Bedən nahiyesi: {bodyPart}
-        Agri seviyesi: {painLevel}/10
-        Simptomlar: {symptoms ?? "Qeyd edilmeyib"}
-        Elave tesvir: {description ?? "Qeyd edilmeyib"}
-        Agrinin muddeti: {duration ?? "Qeyd edilmeyib"}
+Body region: {bodyPart}
+Pain level: {painLevel}/10
+Symptoms: {symptoms ?? "Not provided"}
+Additional description: {description ?? "Not provided"}
+Pain duration: {duration ?? "Not provided"}
 
-        Cavabi bu bolmelerle hazirla:
-        1. Melumatlarin qisa xulasesi.
-        2. Mumkun sebebler ve qeyri-mueyyenlikler.
-        3. Novbeti tehlukesiz addimlar.
-        4. Hansi hallarda hekimə muraciet etmek lazimdir.
+Prepare the response using these four sections:
+1. Brief summary of the information.
+2. Possible causes and uncertainties.
+3. Safe next steps.
+4. When to seek medical attention.
 
-        Qaydalar:
-        - Azerbaycan dilinde tam cumlelerle cavab ver.
-        - Butun dord bolmeni tamamla.
-        - Qeti diaqnoz qoyma.
-        - Derman ve doza teyin etme.
-        - Melumat chatismirse, bunu bildir.
-        - Tehlukeli simptomlarda tecili tibbi yardim tovsiye et.
-        - Sinə agrisi, nefes darligi, huşun itmesi ve ya qəfil
-          zeiflik kimi tehlukeli simptomlari ciddi qiymetlendir.
-        - Hekim muayinesini evez etmediyini qeyd et.
-        - Cavabi lazimsiz tekrarlardan uzaq, lakin etrafli yaz.
-        """;
+Rules:
+- Write the entire answer in {responseLanguage}.
+- Complete all four sections.
+- Do not provide a definitive diagnosis.
+- Do not prescribe medication or dosage.
+- State when information is insufficient.
+- Recommend emergency medical assistance for dangerous symptoms.
+- Treat chest pain, shortness of breath, loss of consciousness,
+  and sudden weakness as potentially serious.
+- Explain that the response does not replace a medical examination.
+- Be detailed without unnecessary repetition.
+""";
+
 
         var url =
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent";

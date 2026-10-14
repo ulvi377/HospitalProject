@@ -10,10 +10,8 @@ import {
   FileText,
   CheckCircle2,
   Hourglass,
-  XCircle,
   AlertCircle,
   Save,
-  RotateCcw,
 } from "lucide-react";
 
 const styles = `
@@ -232,7 +230,8 @@ const styles = `
 }
 `;
 
-const normalizeStatus = (status) => String(status || "Pending").toLowerCase();
+const normalizeStatus = (status) =>
+  String(status || "Pending").toLowerCase();
 
 const statusText = (status) => {
   const statuses = {
@@ -241,12 +240,15 @@ const statusText = (status) => {
     completed: "Tamamlanıb",
     cancelled: "Ləğv edilib",
   };
+
   return statuses[normalizeStatus(status)] || status || "Gözləyir";
 };
 
 const formatDate = (value) => {
   if (!value) return "—";
+
   const date = new Date(value);
+
   if (Number.isNaN(date.getTime())) return "—";
 
   return date.toLocaleDateString("az-AZ", {
@@ -258,7 +260,9 @@ const formatDate = (value) => {
 
 const formatTime = (value) => {
   if (!value) return "—";
+
   const date = new Date(value);
+
   if (Number.isNaN(date.getTime())) return "—";
 
   return date.toLocaleTimeString("az-AZ", {
@@ -288,6 +292,7 @@ export default function Appointments() {
 
       try {
         const response = await api.get("/Appointment");
+
         const data = Array.isArray(response.data)
           ? response.data
           : response.data?.$values || [];
@@ -330,46 +335,75 @@ export default function Appointments() {
   };
 
   const filteredAppointments = useMemo(() => {
-    return appointments.filter((item) => {
-      const term = search.trim().toLowerCase();
-      const patientName = item.patient?.fullName || "";
-      const doctorName = item.doctor?.fullName || "";
-      const notes = item.notes || "";
+    const term = search.trim().toLowerCase();
 
-      const matchesSearch =
-        !term ||
-        patientName.toLowerCase().includes(term) ||
-        doctorName.toLowerCase().includes(term) ||
-        String(item.id).includes(term) ||
-        notes.toLowerCase().includes(term);
+    return appointments
+      .filter((item) => {
+        const patientName = item.patient?.fullName || "";
+        const doctorName = item.doctor?.fullName || "";
+        const notes = item.notes || "";
 
-      const matchesStatus =
-        statusFilter === "all" ||
-        normalizeStatus(item.status) === statusFilter;
+        const matchesSearch =
+          !term ||
+          patientName.toLowerCase().includes(term) ||
+          doctorName.toLowerCase().includes(term) ||
+          String(item.id).includes(term) ||
+          notes.toLowerCase().includes(term);
 
-      return matchesSearch && matchesStatus;
-    });
+        const matchesStatus =
+          statusFilter === "all" ||
+          normalizeStatus(item.status) === statusFilter;
+
+        return matchesSearch && matchesStatus;
+      })
+      .sort((a, b) => {
+        const dateA = new Date(a.appointmentDate).getTime();
+        const dateB = new Date(b.appointmentDate).getTime();
+
+        return (
+          (Number.isFinite(dateB) ? dateB : 0) -
+          (Number.isFinite(dateA) ? dateA : 0)
+        );
+      });
   }, [appointments, search, statusFilter]);
 
   const handleStatusChange = (id, value) => {
-    setSelectedStatuses((previous) => ({ ...previous, [id]: value }));
-    setRowErrors((previous) => ({ ...previous, [id]: "" }));
+    setSelectedStatuses((previous) => ({
+      ...previous,
+      [id]: value,
+    }));
+
+    setRowErrors((previous) => ({
+      ...previous,
+      [id]: "",
+    }));
+
     setNotice(null);
   };
 
   async function saveStatus(item) {
     const newStatus = selectedStatuses[item.id];
 
-    if (!newStatus || normalizeStatus(newStatus) === normalizeStatus(item.status)) {
+    if (
+      !newStatus ||
+      normalizeStatus(newStatus) === normalizeStatus(item.status)
+    ) {
       return;
     }
 
-    setSavingIds((previous) => ({ ...previous, [item.id]: true }));
-    setRowErrors((previous) => ({ ...previous, [item.id]: "" }));
+    setSavingIds((previous) => ({
+      ...previous,
+      [item.id]: true,
+    }));
+
+    setRowErrors((previous) => ({
+      ...previous,
+      [item.id]: "",
+    }));
+
     setNotice(null);
 
     try {
-      // Backend PUT sorğusu qəbulun bütün əsas sahələrini gözləyir.
       const payload = {
         id: item.id,
         patientId: item.patientId,
@@ -379,7 +413,11 @@ export default function Appointments() {
         status: newStatus,
       };
 
-      const response = await api.put(`/Appointment/${item.id}`, payload);
+      const response = await api.put(
+        `/Appointment/${item.id}`,
+        payload
+      );
+
       const updated = response.data;
 
       setAppointments((previous) =>
@@ -387,7 +425,9 @@ export default function Appointments() {
           appointment.id === item.id
             ? {
                 ...appointment,
-                ...(updated && typeof updated === "object" ? updated : {}),
+                ...(updated && typeof updated === "object"
+                  ? updated
+                  : {}),
                 status: updated?.status || newStatus,
               }
             : appointment
@@ -402,7 +442,9 @@ export default function Appointments() {
 
       setNotice({
         type: "success",
-        text: `#${item.id} nömrəli qəbulun statusu "${statusText(newStatus)}" olaraq yeniləndi.`,
+        text: `#${item.id} nömrəli qəbulun statusu "${statusText(
+          newStatus
+        )}" olaraq yeniləndi.`,
       });
     } catch (err) {
       const message =
@@ -415,9 +457,15 @@ export default function Appointments() {
           ? "Backend məlumatları qəbul etmədi. Tarix və iş qrafiki yoxlamasını nəzərdən keçir."
           : "Status yenilənmədi. Backend API-ni yoxla.");
 
-      setRowErrors((previous) => ({ ...previous, [item.id]: message }));
+      setRowErrors((previous) => ({
+        ...previous,
+        [item.id]: message,
+      }));
     } finally {
-      setSavingIds((previous) => ({ ...previous, [item.id]: false }));
+      setSavingIds((previous) => ({
+        ...previous,
+        [item.id]: false,
+      }));
     }
   }
 
@@ -449,7 +497,9 @@ export default function Appointments() {
         <div className="stat">
           <div className="stat-top">
             <span className="stat-label">Bütün qəbullar</span>
-            <div className="stat-icon blue"><CalendarDays size={20} /></div>
+            <div className="stat-icon blue">
+              <CalendarDays size={20} />
+            </div>
           </div>
           <div className="stat-value">{loading ? "—" : stats.total}</div>
           <div className="stat-note">Ümumi qəbul sayı</div>
@@ -458,7 +508,9 @@ export default function Appointments() {
         <div className="stat">
           <div className="stat-top">
             <span className="stat-label">Gözləyən</span>
-            <div className="stat-icon orange"><Hourglass size={20} /></div>
+            <div className="stat-icon orange">
+              <Hourglass size={20} />
+            </div>
           </div>
           <div className="stat-value">{loading ? "—" : stats.pending}</div>
           <div className="stat-note">Qərar gözləyən qəbullar</div>
@@ -467,7 +519,9 @@ export default function Appointments() {
         <div className="stat">
           <div className="stat-top">
             <span className="stat-label">Təsdiqlənmiş</span>
-            <div className="stat-icon green"><CheckCircle2 size={20} /></div>
+            <div className="stat-icon green">
+              <CheckCircle2 size={20} />
+            </div>
           </div>
           <div className="stat-value">{loading ? "—" : stats.confirmed}</div>
           <div className="stat-note">Təsdiqlənmiş görüşlər</div>
@@ -476,7 +530,9 @@ export default function Appointments() {
         <div className="stat">
           <div className="stat-top">
             <span className="stat-label">Tamamlanmış</span>
-            <div className="stat-icon blue"><CheckCircle2 size={20} /></div>
+            <div className="stat-icon blue">
+              <CheckCircle2 size={20} />
+            </div>
           </div>
           <div className="stat-value">{loading ? "—" : stats.completed}</div>
           <div className="stat-note">Bitmiş qəbul sayı</div>
@@ -535,8 +591,12 @@ export default function Appointments() {
           </div>
         ) : error ? null : filteredAppointments.length === 0 ? (
           <div className="empty">
-            <div className="empty-icon"><CalendarDays size={26} /></div>
-            <strong>{search ? "Nəticə tapılmadı" : "Hələ qəbul yoxdur"}</strong>
+            <div className="empty-icon">
+              <CalendarDays size={26} />
+            </div>
+            <strong>
+              {search ? "Nəticə tapılmadı" : "Hələ qəbul yoxdur"}
+            </strong>
             <span>
               {search
                 ? "Axtarış sözünü və ya status filtrini dəyişin."
@@ -571,10 +631,13 @@ export default function Appointments() {
                     <tr key={item.id}>
                       <td>
                         <div className="patient">
-                          <div className="avatar"><UserRound size={18} /></div>
+                          <div className="avatar">
+                            <UserRound size={18} />
+                          </div>
                           <div>
                             <strong>
-                              {item.patient?.fullName || `Pasiyent #${item.patientId}`}
+                              {item.patient?.fullName ||
+                                `Pasiyent #${item.patientId}`}
                             </strong>
                             <small>Pasiyent ID: {item.patientId}</small>
                           </div>
@@ -638,7 +701,10 @@ export default function Appointments() {
                           <div className="row-error">
                             <AlertCircle
                               size={12}
-                              style={{ display: "inline", marginRight: 4 }}
+                              style={{
+                                display: "inline",
+                                marginRight: 4,
+                              }}
                             />
                             {rowErrors[item.id]}
                           </div>

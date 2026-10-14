@@ -171,9 +171,16 @@ function Register() {
                   Sağlamlığınız bizim prioritetimizdir
                 </div>
 
-                <h1 className="max-w-sm text-4xl font-semibold leading-[1.2] tracking-tight xl:text-[42px]">
+   
+                  <h1
+                  className="max-w-sm text-4xl font-semibold leading-[1.2] tracking-tight text-white xl:text-[42px]"
+                  style={{ color: "#fffafa" }}
+                >
                   Sağlam həyata
-                  <span className="block text-teal-300">
+                  <span
+                    className="block"
+                    style={{ color: "#5eead4" }}
+                  >
                     birlikdə addım ataq.
                   </span>
                 </h1>
@@ -216,13 +223,14 @@ function Register() {
               </div>
             </div>
 
-            <div className="relative z-10 mt-12 flex items-center justify-between border-t border-white/10 pt-5 text-xs text-slate-400">
-              <span>© 2026 Hospital</span>
-              <span className="flex items-center gap-1.5">
-                <HeartPulse size={14} className="text-teal-300" />
-                Sağlamlığınız üçün
-              </span>
-            </div>
+           <div className="relative z-10 mt-12 flex items-center justify-between border-t border-white/10 pt-5 text-xs text-white">
+  <span>© 2026 Hospital</span>
+
+  <span className="flex items-center gap-1.5 text-white">
+    <HeartPulse size={14} className="text-teal-300" />
+    Sağlamlığınız üçün
+  </span>
+</div>
           </aside>
 
           {/* REGISTER FORM */}

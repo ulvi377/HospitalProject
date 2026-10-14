@@ -309,57 +309,121 @@ export default function DoctorDetails() {
   const [reviewsError, setReviewsError] = useState("");
   const [reviewsReloadKey, setReviewsReloadKey] = useState(0);
 
-  async function loadDoctor() {
-    setLoading(true);
-    setError("");
-
-    try {
-      if (!id) {
-        throw new Error("Həkim ID-si URL-də göstərilməyib.");
-      }
-
-      const response = await api.get(`/Doctors/${id}`);
-      setDoctor(response.data);
-    } catch (err) {
-      setError(
-        err.response?.data?.message ||
-          "Həkim məlumatları yüklənmədi. Həkim ID-sini və API bağlantısını yoxlayın."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadReviews() {
-    setReviewsLoading(true);
-    setReviewsError("");
-
-    try {
-      if (!id) {
-        throw new Error("Həkim ID-si tapılmadı.");
-      }
-
-      const response = await api.get(`/DoctorRatings/doctor/${id}`);
-      const data = response.data;
-
-      setReviews(getReviewsArray(data));
-    } catch (err) {
-      console.error("Doctor reviews loading error:", err);
-      setReviews([]);
-      setReviewsError(
-        "Rəyləri yükləmək mümkün olmadı. Bir az sonra yenidən cəhd edin."
-      );
-    } finally {
-      setReviewsLoading(false);
-    }
-  }
-
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadDoctor() {
+      setLoading(true);
+      setError("");
+
+      try {
+        if (!id) {
+          throw new Error("Həkim ID-si və ya slug URL-də göstərilməyib.");
+        }
+
+        const isNumericId = /^\\d+$/.test(String(id));
+
+        const endpoint = isNumericId
+          ? `/Doctors/${encodeURIComponent(id)}`
+          : `/Doctors/by-slug/${encodeURIComponent(id)}`;
+
+        const response = await api.get(endpoint);
+
+        if (cancelled) return;
+
+        const doctorData =
+          response.data?.doctor ??
+          response.data?.Doctor ??
+          response.data?.data ??
+          response.data;
+
+        if (!doctorData || typeof doctorData !== "object") {
+          throw new Error("Həkim məlumatları tapılmadı.");
+        }
+
+        setDoctor(doctorData);
+      } catch (err) {
+        if (cancelled) return;
+
+        console.error("Doctor profile loading error:", err);
+
+        setDoctor(null);
+        setError(
+          err.response?.data?.message ||
+            err.message ||
+            "Həkim məlumatları yüklənmədi. Həkim ID-sini, slug-ı və API bağlantısını yoxlayın."
+        );
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
     loadDoctor();
+
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadReviews() {
+      setReviewsLoading(true);
+      setReviewsError("");
+      setReviews([]);
+
+      try {
+        if (!id) {
+          throw new Error("Həkim ID-si tapılmadı.");
+        }
+
+        let doctorId = id;
+
+        // Slug ilə açılıbsa, əvvəlcə həkim məlumatından rəqəmli ID-ni al.
+        if (!/^\\d+$/.test(String(id))) {
+          const doctorResponse = await api.get(
+            `/Doctors/by-slug/${encodeURIComponent(id)}`
+          );
+
+          const doctorData =
+            doctorResponse.data?.doctor ??
+            doctorResponse.data?.Doctor ??
+            doctorResponse.data?.data ??
+            doctorResponse.data;
+
+          doctorId = doctorData?.id ?? doctorData?.Id;
+
+          if (doctorId == null) {
+            throw new Error("Rəylər üçün həkim ID-si tapılmadı.");
+          }
+        }
+
+        const response = await api.get(
+          `/DoctorRatings/doctor/${encodeURIComponent(doctorId)}`
+        );
+
+        if (cancelled) return;
+
+        setReviews(getReviewsArray(response.data));
+      } catch (err) {
+        if (cancelled) return;
+
+        console.error("Doctor reviews loading error:", err);
+        setReviews([]);
+        setReviewsError(
+          "Rəyləri yükləmək mümkün olmadı. Bir az sonra yenidən cəhd edin."
+        );
+      } finally {
+        if (!cancelled) setReviewsLoading(false);
+      }
+    }
+
     loadReviews();
+
+    return () => {
+      cancelled = true;
+    };
   }, [id, reviewsReloadKey]);
 
   const averageFromReviews =
@@ -369,9 +433,52 @@ export default function DoctorDetails() {
       : 0;
 
   const averageRating =
-    reviews.length > 0
-      ? Number(averageFromReviews.toFixed(1))
-      : 0;
+    reviews.length > 0 ? Number(averageFromReviews.toFixed(1)) : 0;
+
+  const doctorName =
+    doctor?.fullName ??
+    doctor?.FullName ??
+    doctor?.name ??
+    doctor?.Name ??
+    "Ad qeyd edilməyib";
+
+  const specialtyName =
+    doctor?.specialty?.name ??
+    doctor?.Specialty?.Name ??
+    doctor?.specialtyName ??
+    doctor?.SpecialtyName ??
+    "İxtisas qeyd edilməyib";
+
+  const imageUrl =
+    doctor?.imageUrl ??
+    doctor?.ImageUrl ??
+    doctor?.image ??
+    doctor?.Image ??
+    "";
+
+  const email = doctor?.email ?? doctor?.Email;
+  const phoneNumber =
+    doctor?.phoneNumber ??
+    doctor?.PhoneNumber ??
+    doctor?.phone ??
+    doctor?.Phone;
+
+  const doctorAddress =
+    doctor?.address ?? doctor?.Address;
+
+  const experience =
+    doctor?.experience ??
+    doctor?.Experience ??
+    doctor?.yearsOfExperience ??
+    doctor?.YearsOfExperience;
+
+  const about =
+    doctor?.about ??
+    doctor?.About ??
+    doctor?.description ??
+    doctor?.Description;
+
+  const doctorId = doctor?.id ?? doctor?.Id ?? id;
 
   return (
     <div className="doctor-details">
@@ -407,7 +514,11 @@ export default function DoctorDetails() {
             <AlertCircle size={32} color="#d45b67" />
             <strong>Məlumat yüklənmədi</strong>
             <span>{error}</span>
-            <button className="retry" onClick={loadDoctor} type="button">
+            <button
+              className="retry"
+              onClick={() => window.location.reload()}
+              type="button"
+            >
               Yenidən cəhd et
             </button>
           </div>
@@ -417,27 +528,23 @@ export default function DoctorDetails() {
 
             <div className="profile">
               <div className="avatar">
-                {doctor.imageUrl ? (
+                {imageUrl ? (
                   <img
-                    src={doctor.imageUrl}
-                    alt={doctor.fullName || "Həkim"}
+                    src={imageUrl}
+                    alt={doctorName}
                     onError={(event) => {
                       event.currentTarget.style.display = "none";
                     }}
                   />
                 ) : (
-                  initials(doctor.fullName)
+                  initials(doctorName)
                 )}
               </div>
 
               <div className="profile-info">
-                <h2>{doctor.fullName || "Ad qeyd edilməyib"}</h2>
+                <h2>{doctorName}</h2>
 
-                <div className="specialty">
-                  {doctor.specialty?.name ||
-                    doctor.specialtyName ||
-                    "İxtisas qeyd edilməyib"}
-                </div>
+                <div className="specialty">{specialtyName}</div>
 
                 <div className="verified">
                   <ShieldCheck size={14} />
@@ -460,7 +567,7 @@ export default function DoctorDetails() {
                     </div>
                     <div>
                       <label>Email ünvanı</label>
-                      <strong>{doctor.email || "Qeyd edilməyib"}</strong>
+                      <strong>{email || "Qeyd edilməyib"}</strong>
                     </div>
                   </div>
 
@@ -470,9 +577,7 @@ export default function DoctorDetails() {
                     </div>
                     <div>
                       <label>Telefon nömrəsi</label>
-                      <strong>
-                        {doctor.phoneNumber || "Qeyd edilməyib"}
-                      </strong>
+                      <strong>{phoneNumber || "Qeyd edilməyib"}</strong>
                     </div>
                   </div>
 
@@ -482,11 +587,7 @@ export default function DoctorDetails() {
                     </div>
                     <div>
                       <label>İxtisas</label>
-                      <strong>
-                        {doctor.specialty?.name ||
-                          doctor.specialtyName ||
-                          "Qeyd edilməyib"}
-                      </strong>
+                      <strong>{specialtyName}</strong>
                     </div>
                   </div>
 
@@ -496,7 +597,7 @@ export default function DoctorDetails() {
                     </div>
                     <div>
                       <label>Həkim ID-si</label>
-                      <strong>{doctor.id ?? doctor.Id ?? id ?? "—"}</strong>
+                      <strong>{doctorId ?? "—"}</strong>
                     </div>
                   </div>
 
@@ -506,7 +607,7 @@ export default function DoctorDetails() {
                     </div>
                     <div>
                       <label>Ünvan</label>
-                      <strong>{doctor.address || "Qeyd edilməyib"}</strong>
+                      <strong>{doctorAddress || "Qeyd edilməyib"}</strong>
                     </div>
                   </div>
 
@@ -516,9 +617,7 @@ export default function DoctorDetails() {
                     </div>
                     <div>
                       <label>İş təcrübəsi</label>
-                      <strong>
-                        {doctor.experience || "Qeyd edilməyib"}
-                      </strong>
+                      <strong>{experience || "Qeyd edilməyib"}</strong>
                     </div>
                   </div>
                 </div>
@@ -531,8 +630,7 @@ export default function DoctorDetails() {
                 </h3>
 
                 <p className="about">
-                  {doctor.about ||
-                    doctor.description ||
+                  {about ||
                     "Bu həkim haqqında əlavə məlumat daxil edilməyib."}
                 </p>
 
@@ -549,7 +647,6 @@ export default function DoctorDetails() {
         ) : null}
       </div>
 
-      {/* Pasiyent rəyləri */}
       <section className="reviews">
         <div className="reviews-head">
           <div>
@@ -629,43 +726,41 @@ export default function DoctorDetails() {
             </div>
           </div>
         ) : (
-          <>
-            <div className="review-list">
-              {reviews.map((review, index) => {
-                const name = getReviewName(review);
-                const rating = getRatingValue(review);
-                const comment = getReviewComment(review);
+          <div className="review-list">
+            {reviews.map((review, index) => {
+              const name = getReviewName(review);
+              const rating = getRatingValue(review);
+              const comment = getReviewComment(review);
 
-                return (
-                  <article
-                    className="review-card"
-                    key={review.id ?? review.Id ?? `${name}-${index}`}
-                  >
-                    <div className="review-card-top">
-                      <div className="review-author">
-                        <div className="review-avatar">
-                          {initials(name) || <UserRound size={18} />}
-                        </div>
-
-                        <div>
-                          <strong>{name}</strong>
-                          <div className="review-date">
-                            {formatDate(getReviewDate(review))}
-                          </div>
-                        </div>
+              return (
+                <article
+                  className="review-card"
+                  key={review.id ?? review.Id ?? `${name}-${index}`}
+                >
+                  <div className="review-card-top">
+                    <div className="review-author">
+                      <div className="review-avatar">
+                        {initials(name) || <UserRound size={18} />}
                       </div>
 
-                      <Stars value={rating} size={13} />
+                      <div>
+                        <strong>{name}</strong>
+                        <div className="review-date">
+                          {formatDate(getReviewDate(review))}
+                        </div>
+                      </div>
                     </div>
 
-                    {comment && (
-                      <p className="review-comment">{comment}</p>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-          </>
+                    <Stars value={rating} size={13} />
+                  </div>
+
+                  {comment && (
+                    <p className="review-comment">{comment}</p>
+                  )}
+                </article>
+              );
+            })}
+          </div>
         )}
       </section>
     </div>

@@ -225,7 +225,7 @@ export default function Schedule() {
 
       try {
         // Backend-də həkim cədvəli üçün istifadə olunan endpoint.
-        const response = await api.get("/DoctorSchedules");
+        const response = await api.get("/DoctorSchedule/my");
 
         if (active) {
           const data = Array.isArray(response.data)

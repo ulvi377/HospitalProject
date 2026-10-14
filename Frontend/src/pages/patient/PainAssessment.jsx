@@ -1,4 +1,6 @@
-import { Suspense, useMemo, useState } from "react";
+
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import * as THREE from "three";
 import { Canvas } from "@react-three/fiber";
 import {
@@ -25,7 +27,16 @@ import {
 } from "lucide-react";
 import api from "../../services/api";
 import "./PainAssessment.css";
+const PAIN_STORAGE_KEY = "hospital_pain_assessment";
 
+function getSavedPainAssessment() {
+  try {
+    const saved = localStorage.getItem(PAIN_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : {};
+  } catch {
+    return {};
+  }
+}
 const symptomOptions = [
   "Hərarət",
   "Ürəkbulanma",
@@ -170,7 +181,6 @@ function AnalysisContent({ text }) {
   return <div className="pain-analysis-content">{elements}</div>;
 }
 
-/* Seçilən nöqtəni modelin üzərində göstərir */
 function SelectedPoint({ position }) {
   if (!position) return null;
 
@@ -179,22 +189,22 @@ function SelectedPoint({ position }) {
       <mesh renderOrder={10}>
         <sphereGeometry args={[0.075, 24, 24]} />
         <meshBasicMaterial
-          color="#31ffe0"
+          color="#ff2020"
           depthTest={false}
           depthWrite={false}
           transparent
-          opacity={0.95}
+          opacity={1}
         />
       </mesh>
 
       <mesh renderOrder={9}>
         <sphereGeometry args={[0.13, 24, 24]} />
         <meshBasicMaterial
-          color="#00cbb2"
+          color="#ff0000"
           depthTest={false}
           depthWrite={false}
           transparent
-          opacity={0.25}
+          opacity={0.35}
         />
       </mesh>
     </group>

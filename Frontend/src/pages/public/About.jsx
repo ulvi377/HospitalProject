@@ -194,57 +194,57 @@ const About = () => {
         </div>
       </section>
 
-      {/* DƏYƏRLƏR */}
-      <section className="bg-[#f7f9fc] py-20 sm:py-24">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-2xl text-center">
-            <span className="text-sm font-bold uppercase tracking-[0.18em] text-teal-700">
-              Dəyərlərimiz
-            </span>
+{/* DƏYƏRLƏR */}
+<section className="bg-[#edf4fa] py-20 sm:py-24">
+  <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-2xl text-center">
+      <h2 className="text-3xl font-bold tracking-tight text-[#102b4e] sm:text-4xl">
+        Dəyərlərimiz
+      </h2>
 
-            <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
-              Bizi fərqləndirən yanaşma
-            </h2>
+      <p className="mt-4 text-base leading-7 text-slate-600">
+        Hər addımda rahatlığı, etibarı və müasir
+        texnologiyanı bir araya gətirməyə çalışırıq.
+      </p>
+    </div>
 
-            <p className="mt-4 text-base leading-7 text-slate-600">
-              Hər addımda rahatlığı, etibarı və müasir
-              texnologiyanı bir araya gətirməyə çalışırıq.
+    <div className="mt-12 grid gap-6 md:grid-cols-3">
+      {values.map((value) => {
+        const Icon = value.icon;
+
+        return (
+          <article
+            key={value.title}
+            className="group flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-7 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-teal-200 hover:shadow-lg sm:p-8"
+          >
+            <div
+              className={`flex h-14 w-14 items-center justify-center rounded-2xl ${value.color}`}
+            >
+              <Icon size={27} />
+            </div>
+
+            <h3 className="mt-6 text-xl font-bold leading-7 text-slate-900">
+              {value.title}
+            </h3>
+
+            <p className="mt-3 flex-1 text-sm leading-7 text-slate-600">
+              {value.description}
             </p>
-          </div>
 
-          <div className="mt-12 grid gap-5 md:grid-cols-3">
-            {values.map((value) => {
-              const Icon = value.icon;
+            <div className="mt-6 flex items-center gap-2 border-t border-slate-100 pt-5 text-sm font-semibold text-teal-800 transition group-hover:text-blue-700">
+              <span>Əsas dəyərimiz</span>
+              <ArrowRight
+                size={16}
+                className="transition-transform group-hover:translate-x-1"
+              />
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  </div>
+</section>
 
-              return (
-                <article
-                  key={value.title}
-                  className="group rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-teal-200 hover:shadow-xl hover:shadow-slate-900/5 sm:p-8"
-                >
-                  <div
-                    className={`flex h-14 w-14 items-center justify-center rounded-2xl ${value.color} transition duration-300 group-hover:scale-105`}
-                  >
-                    <Icon size={27} />
-                  </div>
-
-                  <h3 className="mt-6 text-xl font-bold text-slate-900">
-                    {value.title}
-                  </h3>
-
-                  <p className="mt-3 text-sm leading-7 text-slate-600">
-                    {value.description}
-                  </p>
-
-                  <div className="mt-6 flex items-center gap-2 text-sm font-semibold text-teal-700">
-                    <span>Daha ətraflı yanaşma</span>
-                    <ArrowRight size={16} />
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </div>
-      </section>
 
       {/* MISSİYA VƏ BAXIŞ */}
       <section className="py-20 sm:py-24">

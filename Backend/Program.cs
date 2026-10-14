@@ -15,6 +15,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 // HTTP Client
 builder.Services.AddHttpClient();
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient<LiveTranslationService>();
 
 // Gemini AI Service
 builder.Services.AddHttpClient<GeminiPainAnalysisService>();
