@@ -4,31 +4,73 @@ import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   CalendarDays,
+  CalendarX,
   Users,
   ClipboardList,
-  HeartPulse,
   FileText,
   Clock,
   UserRound,
   LogOut,
   Stethoscope,
   X,
+  Star,
 } from "lucide-react";
 import { AuthContext } from "../../context/AuthContext";
 
 const menuItems = [
-  { label: "Dashboard", path: "/doctor", icon: LayoutDashboard, end: true },
-  { label: "Appointments", path: "/doctor/appointments", icon: CalendarDays },
-  { label: "Patients", path: "/doctor/patients", icon: Users },
-  { label: "Medical Records", path: "/doctor/medical-records", icon: ClipboardList },
-  { label: "Pain Assessments", path: "/doctor/pain-assessments", icon: HeartPulse },
-  { label: "Prescriptions", path: "/doctor/prescriptions", icon: FileText },
-  { label: "Schedule", path: "/doctor/schedule", icon: Clock },
-  { label: "Profile", path: "/doctor/profile", icon: UserRound },
+  {
+    label: "Dashboard",
+    path: "/doctor",
+    icon: LayoutDashboard,
+    end: true,
+  },
+  {
+    label: "Appointments",
+    path: "/doctor/appointments",
+    icon: CalendarDays,
+  },
+  {
+    label: "Patients",
+    path: "/doctor/patients",
+    icon: Users,
+  },
+  {
+    label: "Medical Records",
+    path: "/doctor/medical-records",
+    icon: ClipboardList,
+  },
+  {
+    label: "Prescriptions",
+    path: "/doctor/prescriptions",
+    icon: FileText,
+  },
+  {
+  label: "Reviews",
+  path: "/doctor/ratings",
+  icon: Star,
+  },
+  {
+    label: "Schedule",
+    path: "/doctor/schedule",
+    icon: Clock,
+  },
+  {
+    label: "Absence Requests",
+    path: "/doctor/absence-requests",
+    icon: CalendarX,
+  },
+  {
+    label: "Profile",
+    path: "/doctor/profile",
+    icon: UserRound,
+  },
 ];
 
 const styles = `
-.doctor-sidebar, .doctor-sidebar * { box-sizing: border-box; }
+.doctor-sidebar,
+.doctor-sidebar * {
+  box-sizing: border-box;
+}
 
 .doctor-sidebar {
   width: 235px;
@@ -351,12 +393,29 @@ const styles = `
 }
 
 @media (max-height: 760px) {
-  .doctor-sidebar { padding-top: 9px; }
-  .doctor-sidebar .ds-brand { padding-bottom: 10px; }
-  .doctor-sidebar .ds-divider { margin-bottom: 10px; }
-  .doctor-sidebar .ds-link { min-height: 36px; }
-  .doctor-sidebar .ds-nav { gap: 2px; }
-  .doctor-sidebar .ds-bottom { padding-top: 10px; }
+  .doctor-sidebar {
+    padding-top: 9px;
+  }
+
+  .doctor-sidebar .ds-brand {
+    padding-bottom: 10px;
+  }
+
+  .doctor-sidebar .ds-divider {
+    margin-bottom: 10px;
+  }
+
+  .doctor-sidebar .ds-link {
+    min-height: 36px;
+  }
+
+  .doctor-sidebar .ds-nav {
+    gap: 2px;
+  }
+
+  .doctor-sidebar .ds-bottom {
+    padding-top: 10px;
+  }
 }
 `;
 

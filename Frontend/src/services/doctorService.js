@@ -16,7 +16,7 @@ const doctorService = {
   update(id, doctor) {
     return api.put(`/Doctors/${id}`, {
       ...doctor,
-      id,
+      id: Number(id),
     });
   },
 
@@ -28,11 +28,7 @@ const doctorService = {
     const formData = new FormData();
     formData.append("file", file);
 
-    return api.post(`/Doctors/${id}/image`, formData, {
-      headers: {
-        "Content-Type": undefined,
-      },
-    });
+    return api.post(`/Doctors/${id}/image`, formData);
   },
 };
 

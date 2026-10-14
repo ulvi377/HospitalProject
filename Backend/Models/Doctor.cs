@@ -1,3 +1,4 @@
+
 namespace Hospital.Models;
 
 public class Doctor
@@ -5,6 +6,8 @@ public class Doctor
     public int Id { get; set; }
 
     public string FullName { get; set; } = string.Empty;
+
+    public string Slug { get; set; } = string.Empty;
 
     public string Email { get; set; } = string.Empty;
 
@@ -18,6 +21,5 @@ public class Doctor
 
     public bool IsActive { get; set; } = true;
 
-    // Hekimin Identity hesabı ilə əlaqəsi
     public string? ApplicationUserId { get; set; }
 }

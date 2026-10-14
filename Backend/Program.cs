@@ -1,3 +1,4 @@
+
 using System.Text;
 using Hospital.Data;
 using Hospital.Interfaces;
@@ -14,6 +15,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 // HTTP Client
 builder.Services.AddHttpClient();
+
+// Gemini AI Service
+builder.Services.AddHttpClient<GeminiPainAnalysisService>();
 
 // Database
 var connectionString = builder.Configuration
@@ -84,20 +88,24 @@ builder.Services
     {
         options.ClientId =
             builder.Configuration[
-                "Authentication:Google:ClientId"]!;
+                "Authentication:Google:ClientId"]
+            ?? throw new InvalidOperationException(
+                "Google ClientId tapilmadi.");
 
         options.ClientSecret =
             builder.Configuration[
-                "Authentication:Google:ClientSecret"]!;
+                "Authentication:Google:ClientSecret"]
+            ?? throw new InvalidOperationException(
+                "Google ClientSecret tapilmadi.");
 
-        // Google middleware callback
+        // Google OAuth callback
         options.CallbackPath = "/signin-google";
 
-        // Xarici Google hesabinin melumatlarini saxlayan scheme
+        // Google-dan gelen xarici autentifikasiya
         options.SignInScheme =
             IdentityConstants.ExternalScheme;
 
-        // OAuth state ucun cookie parametrlari
+        // OAuth state/correlation cookie
         options.CorrelationCookie.SameSite =
             SameSiteMode.Lax;
 

@@ -1,3 +1,4 @@
+
 import { useContext, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
@@ -13,6 +14,7 @@ import {
   Menu,
   X,
   ChevronRight,
+  Star,
 } from "lucide-react";
 import { AuthContext } from "../context/AuthContext";
 
@@ -20,9 +22,18 @@ const menuItems = [
   { title: "Dashboard", path: "/patient", icon: LayoutDashboard, end: true },
   { title: "Həkimlər", path: "/patient/doctors", icon: Stethoscope },
   { title: "Qəbullarım", path: "/patient/appointments", icon: CalendarDays },
-  { title: "Qəbul təyin et", path: "/patient/book-appointment", icon: ClipboardList },
-  { title: "Tibbi tarixçə", path: "/patient/medical-history", icon: HeartPulse },
+  {
+    title: "Qəbul təyin et",
+    path: "/patient/book-appointment",
+    icon: ClipboardList,
+  },
+  {
+    title: "Tibbi tarixçə",
+    path: "/patient/medical-history",
+    icon: HeartPulse,
+  },
   { title: "Reseptlərim", path: "/patient/prescriptions", icon: FileText },
+  { title: "Rəylərim", path: "/patient/ratings", icon: Star },
   { title: "Bildirişlər", path: "/patient/notifications", icon: Bell },
   { title: "Profilim", path: "/patient/profile", icon: UserRound },
 ];
@@ -352,6 +363,7 @@ export default function PatientLayout() {
             </div>
 
             <button
+              type="button"
               className="patient-mobile-close"
               onClick={() => setSidebarOpen(false)}
               aria-label="Menyunu bağla"
@@ -378,7 +390,10 @@ export default function PatientLayout() {
                 >
                   <Icon size={19} strokeWidth={1.9} />
                   <span>{item.title}</span>
-                  <ChevronRight className="patient-nav-chevron" size={16} />
+                  <ChevronRight
+                    className="patient-nav-chevron"
+                    size={16}
+                  />
                 </NavLink>
               );
             })}
@@ -389,7 +404,9 @@ export default function PatientLayout() {
               <div className="patient-help-icon">
                 <HeartPulse size={20} />
               </div>
+
               <strong>Sağlamlığınız önəmlidir</strong>
+
               <p>
                 Sağlamlığınızla bağlı məlumatlarınızı buradan izləyin.
               </p>
@@ -410,6 +427,7 @@ export default function PatientLayout() {
           <header className="patient-topbar">
             <div className="patient-topbar-left">
               <button
+                type="button"
                 className="patient-mobile-menu"
                 onClick={() => setSidebarOpen(true)}
                 aria-label="Menyunu aç"
@@ -429,6 +447,7 @@ export default function PatientLayout() {
               <div className="patient-user-avatar">
                 <UserRound size={21} />
               </div>
+
               <div className="patient-user-info">
                 <strong>{displayName}</strong>
                 <span>Pasiyent</span>

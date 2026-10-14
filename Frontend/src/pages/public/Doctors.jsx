@@ -1,6 +1,5 @@
-
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Search,
   UserRound,
@@ -9,13 +8,19 @@ import {
   AlertCircle,
   ArrowRight,
   X,
+  ShieldCheck,
+  HeartPulse,
+  CalendarCheck,
+  Sparkles,
+  ChevronRight,
+  SlidersHorizontal,
+  Activity,
 } from "lucide-react";
 
 import doctorService from "../../services/doctorService";
 
-// Mətni axtarış üçün normallaşdırır
-const normalizeText = (value) => {
-  return String(value ?? "")
+const normalizeText = (value) =>
+  String(value ?? "")
     .toLocaleLowerCase("az")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -29,9 +34,7 @@ const normalizeText = (value) => {
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-};
 
-// Həkimin adını götürür
 const getDoctorName = (doctor) => {
   const fullName =
     doctor?.fullName ??
@@ -41,30 +44,16 @@ const getDoctorName = (doctor) => {
 
   if (fullName) return String(fullName);
 
-  const firstName =
-    doctor?.firstName ??
-    doctor?.FirstName ??
-    doctor?.name ??
-    doctor?.Name ??
-    "";
+  const firstName = doctor?.firstName ?? doctor?.FirstName ?? "";
+  const lastName = doctor?.lastName ?? doctor?.LastName ?? "";
+  const middleName = doctor?.middleName ?? doctor?.MiddleName ?? "";
 
-  const lastName =
-    doctor?.lastName ??
-    doctor?.LastName ??
-    "";
-
-  const middleName =
-    doctor?.middleName ??
-    doctor?.MiddleName ??
-    "";
-
-  return [firstName, middleName, lastName]
-    .filter(Boolean)
-    .join(" ")
-    .trim() || "Həkim";
+  return (
+    [firstName, middleName, lastName].filter(Boolean).join(" ").trim() ||
+    "Həkim"
+  );
 };
 
-// Həkimin ixtisasını götürür
 const getSpecialty = (doctor) => {
   const specialty =
     doctor?.specialtyName ??
@@ -80,9 +69,7 @@ const getSpecialty = (doctor) => {
     doctor?.department ??
     doctor?.Department;
 
-  if (typeof specialty === "string") {
-    return specialty;
-  }
+  if (typeof specialty === "string") return specialty;
 
   if (specialty && typeof specialty === "object") {
     return (
@@ -99,94 +86,61 @@ const getSpecialty = (doctor) => {
   return "";
 };
 
-// Həkimin şəklini götürür
-const getDoctorImage = (doctor) => {
-  return (
-    doctor?.imageUrl ??
-    doctor?.ImageUrl ??
-    doctor?.photoUrl ??
-    doctor?.PhotoUrl ??
-    doctor?.profileImage ??
-    doctor?.ProfileImage ??
-    doctor?.image ??
-    doctor?.Image ??
-    doctor?.photo ??
-    doctor?.Photo ??
-    doctor?.avatar ??
-    doctor?.Avatar ??
-    ""
-  );
-};
+const getDoctorImage = (doctor) =>
+  doctor?.imageUrl ??
+  doctor?.ImageUrl ??
+  doctor?.photoUrl ??
+  doctor?.PhotoUrl ??
+  doctor?.profileImageUrl ??
+  doctor?.ProfileImageUrl ??
+  doctor?.profileImage ??
+  doctor?.ProfileImage ??
+  doctor?.image ??
+  doctor?.Image ??
+  doctor?.photo ??
+  doctor?.Photo ??
+  doctor?.avatar ??
+  doctor?.Avatar ??
+  "";
 
-// Həkimin ID-sini götürür
-const getDoctorId = (doctor) => {
-  return (
-    doctor?.id ??
-    doctor?.Id ??
-    doctor?.doctorId ??
-    doctor?.DoctorId
-  );
-};
+const getDoctorId = (doctor) =>
+  doctor?.id ??
+  doctor?.Id ??
+  doctor?.doctorId ??
+  doctor?.DoctorId;
 
-// API cavabından həkim siyahısını çıxarır
+const getDoctorSlug = (doctor) =>
+  doctor?.slug ??
+  doctor?.Slug ??
+  doctor?.doctorSlug ??
+  doctor?.DoctorSlug ??
+  "";
+
 const getDoctorsArray = (response) => {
-  if (Array.isArray(response)) {
-    return response;
-  }
+  const candidates = [
+    response?.data,
+    response?.data?.items,
+    response?.data?.Items,
+    response?.data?.doctors,
+    response?.data?.Doctors,
+    response?.data?.$values,
+    response?.items,
+    response?.Items,
+    response?.doctors,
+    response?.Doctors,
+    response?.results,
+    response?.Results,
+    response?.$values,
+    response,
+  ];
 
-  if (Array.isArray(response?.data)) {
-    return response.data;
-  }
-
-  if (Array.isArray(response?.items)) {
-    return response.items;
-  }
-
-  if (Array.isArray(response?.Items)) {
-    return response.Items;
-  }
-
-  if (Array.isArray(response?.doctors)) {
-    return response.doctors;
-  }
-
-  if (Array.isArray(response?.Doctors)) {
-    return response.Doctors;
-  }
-
-  if (Array.isArray(response?.results)) {
-    return response.results;
-  }
-
-  if (Array.isArray(response?.Results)) {
-    return response.Results;
-  }
-
-  if (Array.isArray(response?.$values)) {
-    return response.$values;
-  }
-
-  if (Array.isArray(response?.data?.items)) {
-    return response.data.items;
-  }
-
-  if (Array.isArray(response?.data?.Items)) {
-    return response.data.Items;
-  }
-
-  return [];
+  return candidates.find(Array.isArray) ?? [];
 };
 
-// Obyektdəki bütün mətnləri axtarış üçün toplayır
 const getSearchableText = (value, depth = 0) => {
-  if (value == null || depth > 5) {
-    return "";
-  }
+  if (value == null || depth > 5) return "";
 
-  if (
-    typeof value === "string" ||
-    typeof value === "number"
-  ) {
+  if (typeof value === "string" || typeof value === "number") {
     return String(value);
   }
 
@@ -200,7 +154,6 @@ const getSearchableText = (value, depth = 0) => {
     return Object.entries(value)
       .filter(([key]) => {
         const normalizedKey = normalizeText(key);
-
         return ![
           "password",
           "token",
@@ -215,17 +168,11 @@ const getSearchableText = (value, depth = 0) => {
   return "";
 };
 
-// Ada və ixtisasa görə axtarış
 const matchesDoctorSearch = (doctor, query) => {
   const normalizedQuery = normalizeText(query);
+  if (!normalizedQuery) return true;
 
-  if (!normalizedQuery) {
-    return true;
-  }
-
-  const words = normalizedQuery
-    .split(/\s+/)
-    .filter(Boolean);
+  const words = normalizedQuery.split(/\s+/).filter(Boolean);
 
   const searchableText = normalizeText(
     [
@@ -235,31 +182,26 @@ const matchesDoctorSearch = (doctor, query) => {
     ].join(" ")
   );
 
-  // Məsələn: "elvin kardioloq"
-  // Hər iki söz həkim məlumatlarında tapılmalıdır.
-  return words.every((word) => {
-    if (searchableText.includes(word)) {
-      return true;
-    }
+  const aliases = {
+    kardioloq: ["kardiolog", "cardiologist", "cardiology"],
+    kardiolog: ["kardioloq", "cardiologist", "cardiology"],
+    terapevt: ["terapiya", "therapist"],
+    nevroloq: ["neurolog", "neurology"],
+    pediatr: ["pediatriya", "pediatrician", "pediatrics"],
+    cerrah: ["surgeon", "surgery"],
+    uroloq: ["urolog", "urology"],
+    stomatoloq: ["dentist", "dentistry"],
+    dermatoloq: ["dermatolog", "dermatologist", "dermatology"],
+    ginekoloq: ["gynecologist", "gynecology"],
+  };
 
-    // Kardioloq / kardiolog kimi yazılış fərqlərinə kömək edir
-    const aliases = {
-      kardioloq: ["kardiolog", "cardiologist", "cardiology"],
-      kardiolog: ["kardioloq", "cardiologist", "cardiology"],
-      terapevt: ["terapiya", "therapist", "therapist"],
-      nevroloq: ["neurolog", "neurology"],
-      pediatr: ["pediatriya", "pediatrician", "pediatrics"],
-      cerrah: ["cərrah", "surgeon", "surgery"],
-      uroloq: ["urolog", "urology"],
-      stomatoloq: ["dentist", "dentistry"],
-      dermatoloq: ["dermatolog", "dermatologist", "dermatology"],
-      ginekoloq: ["gynecologist", "gynecology"],
-    };
-
-    return (aliases[word] ?? []).some((alias) =>
-      searchableText.includes(normalizeText(alias))
-    );
-  });
+  return words.every(
+    (word) =>
+      searchableText.includes(word) ||
+      (aliases[word] ?? []).some((alias) =>
+        searchableText.includes(normalizeText(alias))
+      )
+  );
 };
 
 function DoctorImage({ doctor }) {
@@ -272,8 +214,10 @@ function DoctorImage({ doctor }) {
 
   if (!image || imageError) {
     return (
-      <div className="flex h-64 w-full items-center justify-center bg-gradient-to-br from-sky-50 to-blue-100">
-        <UserRound className="h-24 w-24 text-blue-300" />
+      <div className="flex h-full min-h-[260px] items-center justify-center bg-gradient-to-br from-sky-50 via-blue-50 to-cyan-100">
+        <div className="flex h-24 w-24 items-center justify-center rounded-full border border-white bg-white/80 text-blue-300 shadow-sm">
+          <UserRound className="h-14 w-14" strokeWidth={1.2} />
+        </div>
       </div>
     );
   }
@@ -282,13 +226,15 @@ function DoctorImage({ doctor }) {
     <img
       src={image}
       alt={getDoctorName(doctor)}
-      className="h-64 w-full object-cover object-top transition duration-500 group-hover:scale-105"
+      loading="lazy"
+      className="h-full min-h-[260px] w-full object-cover object-top transition duration-700 group-hover:scale-105"
       onError={() => setImageError(true)}
     />
   );
 }
 
 export default function Doctors() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const specialtyFromUrl = searchParams.get("specialty") ?? "";
@@ -306,26 +252,24 @@ export default function Doctors() {
     setError("");
 
     try {
-      // Mövcud doctorService istifadə olunur.
       const response = await doctorService.getAll(
-        specialtyFromUrl
-          ? { specialtyId: specialtyFromUrl }
-          : undefined
+        specialtyFromUrl ? { specialtyId: specialtyFromUrl } : {}
       );
 
       const list = getDoctorsArray(response);
 
-      setDoctors(list);
-
-      if (!Array.isArray(response) && list.length === 0) {
-        console.warn("Doctors API cavabı:", response);
-      }
+      setDoctors(
+        list.filter(
+          (doctor) =>
+            doctor?.isActive !== false &&
+            doctor?.IsActive !== false
+        )
+      );
     } catch (err) {
       console.error("Həkimləri yükləmək mümkün olmadı:", err);
-
       setDoctors([]);
       setError(
-        "Həkim məlumatlarını yükləmək mümkün olmadı. Backend serverin işlədiyini yoxla."
+        "Həkim məlumatlarını yükləmək mümkün olmadı. Backend serverin işlədiyini yoxlayın."
       );
     } finally {
       setLoading(false);
@@ -336,29 +280,25 @@ export default function Doctors() {
     loadDoctors();
   }, [loadDoctors]);
 
-  // URL-dəki axtarış dəyişəndə input-u yenilə
   useEffect(() => {
     setSearch(searchParams.get("search") ?? "");
   }, [searchParams]);
 
-  // Axtarış nəticələri
   const filteredDoctors = useMemo(() => {
     return doctors.filter((doctor) => {
       const matchesSearch = matchesDoctorSearch(doctor, search);
-
       const specialtyName = normalizeText(getSpecialty(doctor));
+
       const matchesSpecialty =
         !specialtyFromUrl ||
         String(
           doctor?.specialtyId ??
-          doctor?.SpecialtyId ??
-          doctor?.specializationId ??
-          doctor?.SpecializationId ??
-          ""
+            doctor?.SpecialtyId ??
+            doctor?.specializationId ??
+            doctor?.SpecializationId ??
+            ""
         ) === specialtyFromUrl ||
-        normalizeText(specialtyName).includes(
-          normalizeText(specialtyFromUrl)
-        );
+        specialtyName.includes(normalizeText(specialtyFromUrl));
 
       return matchesSearch && matchesSpecialty;
     });
@@ -388,107 +328,220 @@ export default function Doctors() {
     setSearchParams(nextParams, { replace: true });
   };
 
+  const openDoctorProfile = (doctor) => {
+    const slug = getDoctorSlug(doctor);
+
+    if (slug !== undefined && slug !== null && String(slug).trim() !== "") {
+      navigate(`/doctors/${encodeURIComponent(String(slug).trim())}`);
+      return;
+    }
+
+    console.error("Həkimin slug məlumatı tapılmadı:", doctor);
+    alert(
+      "Həkim profilini açmaq mümkün olmadı. Həkimin slug məlumatı yoxdur."
+    );
+  };
+
   return (
-    <main className="min-h-screen bg-slate-50">
-      {/* Hero */}
-      <section className="relative overflow-hidden bg-gradient-to-r from-blue-950 via-blue-900 to-cyan-800 px-4 py-16 text-white sm:py-20">
-        <div className="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" />
-        <div className="absolute -bottom-24 left-10 h-72 w-72 rounded-full bg-blue-400/10 blur-3xl" />
+    <main className="min-h-screen bg-[#f5f8fc] text-slate-900">
+      {/* PREMIUM HERO */}
+      <section className="relative isolate overflow-hidden bg-[#0b1f3a] text-white">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(14,165,233,0.22),transparent_45%),radial-gradient(ellipse_at_bottom_left,rgba(37,99,235,0.20),transparent_45%)]" />
 
-        <div className="relative mx-auto max-w-7xl">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-blue-100">
-            <Stethoscope className="h-4 w-4" />
-            Peşəkar tibbi heyət
-          </div>
+        <div className="absolute -right-24 top-10 h-80 w-80 rounded-full border border-white/10" />
+        <div className="absolute -right-10 top-24 h-52 w-52 rounded-full border border-white/10" />
+        <div className="absolute -bottom-36 left-1/3 h-96 w-96 rounded-full bg-cyan-400/10 blur-3xl" />
 
-          <h1 className="max-w-3xl text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-            Həkimlərimiz
-          </h1>
-
-          <p className="mt-5 max-w-2xl text-base leading-7 text-blue-100 sm:text-lg">
-            Sağlamlığınız üçün təcrübəli mütəxəssislərimizi
-            kəşf edin və sizə uyğun həkimi seçin.
-          </p>
-
-          <div className="mt-8 flex flex-wrap gap-6 text-sm text-blue-100">
-            <div className="flex items-center gap-2">
-              <UserRound className="h-5 w-5" />
-              Peşəkar mütəxəssislər
-            </div>
-            <div className="flex items-center gap-2">
-              <Stethoscope className="h-5 w-5" />
-              Müxtəlif ixtisaslar
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Search */}
-      <section className="relative z-10 mx-auto -mt-7 max-w-7xl px-4">
-        <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-xl shadow-slate-200/60 sm:p-6">
-          <label
-            htmlFor="doctor-search"
-            className="mb-3 block text-sm font-semibold text-slate-700"
-          >
-            Həkim axtarışı
-          </label>
-
-          <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 transition focus-within:border-blue-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-100">
-            <Search className="h-5 w-5 shrink-0 text-slate-400" />
-
-            <input
-              id="doctor-search"
-              type="search"
-              value={search}
-              onChange={handleSearchChange}
-              placeholder="Həkimin adını və ya ixtisasını yazın..."
-              className="h-14 min-w-0 flex-1 bg-transparent text-slate-800 outline-none placeholder:text-slate-400"
-            />
-
-            {search && (
-              <button
-                type="button"
-                onClick={clearSearch}
-                aria-label="Axtarışı təmizlə"
-                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            )}
-          </div>
-
-          <p className="mt-3 text-sm text-slate-500">
-            Ad, soyad və ixtisas üzrə axtarış edə bilərsiniz.
-            Məsələn: <span className="font-medium text-blue-700">Elvin kardioloq</span>
-          </p>
-        </div>
-      </section>
-
-      {/* Doctors list */}
-      <section className="mx-auto max-w-7xl px-4 py-12 sm:py-16">
-        <div className="mb-8 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+        <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-[1.2fr_0.8fr] lg:px-8 lg:py-24">
           <div>
-            <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">
-              Həkimlərimizlə tanış olun
+            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-white/[0.06] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] text-cyan-200 sm:text-sm">
+              <Sparkles className="h-4 w-4" />
+              Avropa Hospital
+            </div>
+
+            <h1 className="mt-7 max-w-3xl text-4xl font-extrabold leading-[1.12] tracking-tight sm:text-5xl lg:text-6xl">
+              Sağlamlığınız üçün
+              <span className="mt-2 block bg-gradient-to-r from-cyan-300 to-blue-300 bg-clip-text text-transparent">
+                doğru mütəxəssis
+              </span>
+            </h1>
+
+            <p className="mt-6 max-w-2xl text-base leading-8 text-slate-300 sm:text-lg">
+              Peşəkar həkimlərimizi kəşf edin, ixtisasları araşdırın
+              və sağlamlığınız üçün doğru seçimi rahatlıqla edin.
+            </p>
+
+            <div className="mt-8 flex flex-wrap gap-3">
+              <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3">
+                <ShieldCheck className="h-5 w-5 text-cyan-300" />
+                <span className="text-sm font-medium text-slate-100">
+                  Peşəkar tibbi heyət
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3">
+                <HeartPulse className="h-5 w-5 text-cyan-300" />
+                <span className="text-sm font-medium text-slate-100">
+                  Fərdi yanaşma
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="relative hidden lg:block">
+            <div className="absolute inset-4 rounded-[2rem] bg-cyan-400/10 blur-2xl" />
+
+            <div className="relative rounded-[2rem] border border-white/10 bg-white/[0.06] p-7 shadow-2xl backdrop-blur-sm">
+              <div className="flex items-center gap-4">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-300 to-blue-500 text-white shadow-lg shadow-blue-900/30">
+                  <Stethoscope className="h-8 w-8" />
+                </div>
+
+                <div>
+                  <p className="text-sm font-medium text-cyan-200">
+                    Sağlamlığınız bizim üçün dəyərlidir
+                  </p>
+                  <h2 className="mt-1 text-2xl font-bold text-white">
+                    Həkimlərinizi kəşf edin
+                  </h2>
+                </div>
+              </div>
+
+              <div className="my-7 h-px bg-white/10" />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-white/10 bg-[#102944] p-4">
+                  <HeartPulse className="h-6 w-6 text-cyan-300" />
+                  <p className="mt-3 text-sm font-semibold text-white">
+                    Fərqli ixtisaslar
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">
+                    Ehtiyacınıza uyğun mütəxəssis
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-[#102944] p-4">
+                  <CalendarCheck className="h-6 w-6 text-cyan-300" />
+                  <p className="mt-3 text-sm font-semibold text-white">
+                    Rahat qəbul
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">
+                    Görüş prosesini idarə edin
+                  </p>
+                </div>
+              </div>
+
+              <p className="mt-6 flex items-center gap-2 text-sm text-slate-300">
+                <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                Həkimlər haqqında məlumat bir yerdə
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SEARCH PANEL */}
+      <section className="relative z-10 mx-auto -mt-7 max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.22)] sm:p-7">
+          <div className="flex flex-col gap-5 md:flex-row md:items-center">
+            <div className="flex flex-1 items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+                <Search className="h-5 w-5" />
+              </div>
+
+              <div>
+                <h2 className="text-lg font-bold text-[#102b4e]">
+                  Sizə uyğun həkimi tapın
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Ad, soyad və ya ixtisas üzrə axtarın
+                </p>
+              </div>
+            </div>
+
+            <div className="flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 transition focus-within:border-blue-400 focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-100">
+              <Search className="h-5 w-5 shrink-0 text-slate-400" />
+
+              <input
+                id="doctor-search"
+                type="search"
+                value={search}
+                onChange={handleSearchChange}
+                placeholder="Məsələn: Elvin kardioloq"
+                className="h-14 min-w-0 flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 sm:text-base"
+              />
+
+              {search && (
+                <button
+                  type="button"
+                  onClick={clearSearch}
+                  aria-label="Axtarışı təmizlə"
+                  className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {specialtyFromUrl && (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <span className="text-sm text-slate-500">
+                Aktiv ixtisas filtri:
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700">
+                {specialtyFromUrl}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = new URLSearchParams(searchParams);
+                    next.delete("specialty");
+                    setSearchParams(next);
+                  }}
+                  aria-label="İxtisas filtrini sil"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </span>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* DOCTORS */}
+      <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+        <div className="mb-9 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+          <div>
+            <div className="mb-3 flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.2em] text-blue-700">
+              <span className="h-1 w-8 rounded-full bg-cyan-500" />
+              Mütəxəssislərimiz
+            </div>
+
+            <h2 className="text-3xl font-extrabold tracking-tight text-[#102b4e] sm:text-4xl">
+              Həkimlərimiz
             </h2>
 
+            <p className="mt-3 max-w-xl text-sm leading-7 text-slate-500 sm:text-base">
+              Həkimlərin profillərinə baxın və ehtiyacınıza uyğun
+              mütəxəssisi seçin.
+            </p>
+
             {!loading && !error && (
-              <p className="mt-2 text-slate-500">
+              <p className="mt-3 text-sm font-semibold text-blue-700">
                 {filteredDoctors.length} həkim tapıldı
               </p>
             )}
           </div>
 
-          {!loading && !error && (
-            <button
-              type="button"
-              onClick={() => setReloadKey((key) => key + 1)}
-              className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:text-blue-700 sm:self-auto"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Yenilə
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setReloadKey((key) => key + 1)}
+            disabled={loading}
+            className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 disabled:opacity-50 sm:self-auto"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            Yenilə
+          </button>
         </div>
 
         {loading ? (
@@ -496,61 +549,58 @@ export default function Doctors() {
             {[1, 2, 3, 4].map((item) => (
               <div
                 key={item}
-                className="overflow-hidden rounded-2xl border border-slate-100 bg-white"
+                className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
               >
                 <div className="h-64 animate-pulse bg-slate-200" />
                 <div className="space-y-3 p-5">
-                  <div className="h-5 w-3/4 animate-pulse rounded bg-slate-200" />
-                  <div className="h-4 w-1/2 animate-pulse rounded bg-slate-100" />
-                  <div className="h-10 animate-pulse rounded-lg bg-slate-100" />
+                  <div className="h-4 w-3/4 animate-pulse rounded bg-slate-200" />
+                  <div className="h-3 w-1/2 animate-pulse rounded bg-slate-100" />
+                  <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
                 </div>
               </div>
             ))}
           </div>
         ) : error ? (
-          <div className="rounded-2xl border border-red-100 bg-white px-6 py-12 text-center">
+          <div className="rounded-2xl border border-red-100 bg-white px-6 py-14 text-center">
             <AlertCircle className="mx-auto h-12 w-12 text-red-500" />
-
-            <h3 className="mt-4 text-lg font-semibold text-slate-900">
-              Xəta baş verdi
+            <h3 className="mt-4 text-xl font-bold text-slate-900">
+              Məlumatlar yüklənmədi
             </h3>
-
-            <p className="mx-auto mt-2 max-w-xl text-slate-500">
+            <p className="mx-auto mt-2 max-w-xl text-sm leading-7 text-slate-500">
               {error}
             </p>
-
             <button
               type="button"
               onClick={() => setReloadKey((key) => key + 1)}
-              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-medium text-white transition hover:bg-blue-800"
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white transition hover:bg-blue-800"
             >
               <RefreshCw className="h-4 w-4" />
               Yenidən yoxla
             </button>
           </div>
         ) : filteredDoctors.length === 0 ? (
-          <div className="rounded-2xl border border-slate-100 bg-white px-6 py-16 text-center">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-blue-50">
-              <Search className="h-8 w-8 text-blue-600" />
+          <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center shadow-sm">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+              <Search className="h-8 w-8" />
             </div>
-
-            <h3 className="mt-5 text-xl font-semibold text-slate-900">
+            <h3 className="mt-5 text-xl font-bold text-[#102b4e]">
               Həkim tapılmadı
             </h3>
-
-            <p className="mx-auto mt-2 max-w-md text-slate-500">
-              Axtarış sözlərini dəyişin və ya başqa ad və ixtisasla
+            <p className="mx-auto mt-2 max-w-md text-sm leading-7 text-slate-500">
+              Axtarış sözlərini dəyişin və başqa ad və ya ixtisasla
               yenidən cəhd edin.
             </p>
-
-            {search && (
+            {(search || specialtyFromUrl) && (
               <button
                 type="button"
-                onClick={clearSearch}
-                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-medium text-white transition hover:bg-blue-800"
+                onClick={() => {
+                  setSearch("");
+                  setSearchParams({});
+                }}
+                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white transition hover:bg-blue-800"
               >
                 <X className="h-4 w-4" />
-                Axtarışı təmizlə
+                Filtrləri təmizlə
               </button>
             )}
           </div>
@@ -560,51 +610,89 @@ export default function Doctors() {
               const id = getDoctorId(doctor);
               const name = getDoctorName(doctor);
               const specialty = getSpecialty(doctor);
+              const slug = getDoctorSlug(doctor);
 
               return (
                 <article
-                  key={id ?? `${name}-${index}`}
-                  className="group overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-blue-900/10"
+                  key={id ?? slug ?? `${name}-${index}`}
+                  className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:border-blue-200 hover:shadow-xl hover:shadow-blue-950/10"
                 >
-                  <div className="relative overflow-hidden bg-slate-100">
+                  <div className="relative h-64 overflow-hidden bg-gradient-to-br from-sky-50 via-blue-50 to-cyan-100">
                     <DoctorImage doctor={doctor} />
 
-                    <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-slate-950/60 to-transparent" />
+                    <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#0b1f3a]/30 to-transparent" />
 
-                    <div className="absolute bottom-4 left-4 inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/95 px-3 py-1.5 text-xs font-semibold text-blue-800 shadow">
-                      <Stethoscope className="h-3.5 w-3.5" />
-                      {specialty || "Tibb mütəxəssisi"}
+                    <div className="absolute left-4 top-4 inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/95 px-3 py-1.5 text-xs font-bold text-emerald-700 shadow-sm">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      Aktiv həkim
                     </div>
                   </div>
 
-                  <div className="p-5">
-                    <h3 className="text-lg font-bold text-slate-900 transition group-hover:text-blue-700">
+                  <div className="flex flex-1 flex-col p-5">
+                    <div className="inline-flex w-fit max-w-full items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">
+                      <Stethoscope className="h-4 w-4 shrink-0" />
+                      <span className="truncate">
+                        {specialty || "Tibb mütəxəssisi"}
+                      </span>
+                    </div>
+
+                    <h3 className="mt-4 min-h-14 text-lg font-extrabold leading-7 text-[#102b4e] transition group-hover:text-blue-700">
                       {name}
                     </h3>
 
-                    <p className="mt-2 min-h-5 text-sm text-slate-500">
-                      {specialty || "Həkim"}
+                    <p className="mt-2 text-sm leading-6 text-slate-500">
+                      {specialty
+                        ? `${specialty} üzrə mütəxəssis`
+                        : "Sağlamlığınız üçün tibbi mütəxəssis"}
                     </p>
 
-                    {id != null ? (
-                      <Link
-                        to={`/doctors/${id}`}
-                        className="mt-5 flex w-full items-center justify-between rounded-xl bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 transition hover:bg-blue-700 hover:text-white"
+                    <div className="mt-auto border-t border-slate-100 pt-5">
+                      <button
+                        type="button"
+                        onClick={() => openDoctorProfile(doctor)}
+                        className="flex w-full items-center justify-between rounded-xl bg-slate-50 px-4 py-3.5 text-sm font-bold text-[#102b4e] transition hover:bg-blue-700 hover:text-white focus:outline-none focus:ring-4 focus:ring-blue-100"
                       >
-                        Ətraflı məlumat
+                        <span className="flex items-center gap-2">
+                          <UserRound className="h-4 w-4" />
+                          Profilə bax
+                        </span>
                         <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
-                      </Link>
-                    ) : (
-                      <div className="mt-5 rounded-xl bg-slate-100 px-4 py-3 text-center text-sm text-slate-500">
-                        Həkim ID-si mövcud deyil
-                      </div>
-                    )}
+                      </button>
+                    </div>
                   </div>
                 </article>
               );
             })}
           </div>
         )}
+      </section>
+
+      {/* BOTTOM CTA */}
+      <section className="border-t border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-9 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+              <Activity className="h-6 w-6" />
+            </div>
+            <div>
+              <h3 className="font-bold text-[#102b4e]">
+                Sizə uyğun həkimi tapın
+              </h3>
+              <p className="mt-1 text-sm leading-6 text-slate-500">
+                İxtisasları araşdırın və ehtiyacınıza uyğun mütəxəssis seçin.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => navigate("/specialties")}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-bold text-blue-700 transition hover:bg-blue-100"
+          >
+            İxtisaslara bax
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
       </section>
     </main>
   );

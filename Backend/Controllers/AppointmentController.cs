@@ -487,6 +487,24 @@ public class AppointmentController : ControllerBase
             });
         }
 
+        var appointmentDate = appointment.AppointmentDate.Date;
+        var nextDay = appointmentDate.AddDays(1);
+
+        var approvedAbsence = await _context.DoctorAbsenceRequests
+            .AnyAsync(r =>
+                r.DoctorId == appointment.DoctorId &&
+                r.AbsenceDate >= appointmentDate &&
+                r.AbsenceDate < nextDay &&
+                r.Status == "Approved");
+
+        if (approvedAbsence)
+        {
+            return BadRequest(new
+            {
+                message = "Hekim secilen tarixde mezuniyyetde oldugu ucun rezerv etmek mumkun deyil."
+            });
+        }
+
         var dayOfWeek = appointment.AppointmentDate.DayOfWeek;
         var appointmentTime = appointment.AppointmentDate.TimeOfDay;
 
@@ -554,21 +572,14 @@ public class AppointmentController : ControllerBase
             });
     }
 
-    // PUT: api/appointment/1
-    [Authorize(Roles = "Admin,Doctor,Patient")]
-    [HttpPut("{id}")]
-    public async Task<IActionResult> UpdateAppointment(
-        int id,
-        Appointment appointment)
+ 
+// PUT: api/appointment/1
+[Authorize(Roles = "Admin,Doctor,Patient")]
+[HttpPut("{id}")]
+public async Task<IActionResult> UpdateAppointment(
+    int id,
+    [FromBody] Appointment appointment)
     {
-        if (id != appointment.Id)
-        {
-            return BadRequest(new
-            {
-                message = "ID uygun gelmir."
-            });
-        }
-
         var existingAppointment = await _context.Appointments
             .Include(a => a.Doctor)
             .Include(a => a.Patient)
@@ -583,10 +594,12 @@ public class AppointmentController : ControllerBase
         }
 
         var isAdmin = User.IsInRole("Admin");
+        var isDoctor = User.IsInRole("Doctor");
+        var isPatient = User.IsInRole("Patient");
 
         if (!isAdmin)
         {
-            if (User.IsInRole("Patient"))
+            if (isPatient)
             {
                 var currentUserId = User.FindFirstValue(
                     ClaimTypes.NameIdentifier);
@@ -595,13 +608,8 @@ public class AppointmentController : ControllerBase
                 {
                     return Forbid();
                 }
-
-                if (existingAppointment.PatientId != appointment.PatientId)
-                {
-                    return Forbid();
-                }
             }
-            else if (User.IsInRole("Doctor"))
+            else if (isDoctor)
             {
                 var currentUserEmail = User.FindFirstValue(
                     ClaimTypes.Email);
@@ -610,118 +618,78 @@ public class AppointmentController : ControllerBase
                 {
                     return Forbid();
                 }
-
-                var newDoctor = await _context.Doctors
-                    .FirstOrDefaultAsync(d => d.Id == appointment.DoctorId);
-
-                if (newDoctor == null || newDoctor.Email != currentUserEmail)
-                {
-                    return Forbid();
-                }
+            }
+            else
+            {
+                return Forbid();
             }
         }
 
-        var patientExists = await _context.Patients
-            .AnyAsync(p => p.Id == appointment.PatientId);
-
-        if (!patientExists)
-        {
-            return BadRequest(new
-            {
-                message = "Gosterilen pasiyent movcud deyil."
-            });
-        }
-
-        var doctorExists = await _context.Doctors
-            .AnyAsync(d => d.Id == appointment.DoctorId);
-
-        if (!doctorExists)
-        {
-            return BadRequest(new
-            {
-                message = "Gosterilen hekim movcud deyil."
-            });
-        }
-
-        if (appointment.AppointmentDate <= DateTime.Now)
-        {
-            return BadRequest(new
-            {
-                message = "Qebul vaxti gelecek tarixde olmalidir."
-            });
-        }
-
-        var dayOfWeek = appointment.AppointmentDate.DayOfWeek;
-        var appointmentTime = appointment.AppointmentDate.TimeOfDay;
-
-        var schedule = await _context.DoctorSchedules
-            .FirstOrDefaultAsync(s =>
-                s.DoctorId == appointment.DoctorId &&
-                s.DayOfWeek == dayOfWeek &&
-                s.IsAvailable);
-
-        if (schedule == null)
-        {
-            return BadRequest(new
-            {
-                message = "Hekimin secilen gun ucun is qrafiki yoxdur."
-            });
-        }
-
-        if (appointmentTime < schedule.StartTime ||
-            appointmentTime >= schedule.EndTime)
-        {
-            return BadRequest(new
-            {
-                message =
-                    $"Hekim bu gun {schedule.StartTime:hh\\:mm} - {schedule.EndTime:hh\\:mm} araliginda qebul edir."
-            });
-        }
-
-        var duplicateAppointment = await _context.Appointments
-            .AnyAsync(a =>
-                a.Id != id &&
-                a.DoctorId == appointment.DoctorId &&
-                a.AppointmentDate == appointment.AppointmentDate &&
-                a.Status != "Cancelled");
-
-        if (duplicateAppointment)
-        {
-            return BadRequest(new
-            {
-                message = "Bu saat ucun hekimde artiq qebul movcuddur."
-            });
-        }
-
         var oldStatus = existingAppointment.Status;
-        var oldPatientId = existingAppointment.PatientId;
 
-        existingAppointment.PatientId = appointment.PatientId;
-        existingAppointment.DoctorId = appointment.DoctorId;
-        existingAppointment.AppointmentDate = appointment.AppointmentDate;
-        existingAppointment.Notes = appointment.Notes;
-
-        if (!User.IsInRole("Patient"))
+        // Yalnız status dəyişdirilir.
+        // Digər sahələr mövcud dəyərlərində qalır.
+        if (!isPatient)
         {
-            existingAppointment.Status = appointment.Status;
+            if (string.IsNullOrWhiteSpace(appointment.Status))
+            {
+                return BadRequest(new
+                {
+                    message = "Status bos ola bilmez."
+                });
+            }
+
+            var allowedStatuses = new[]
+            {
+            "Pending",
+            "Confirmed",
+            "Completed",
+            "Cancelled"
+        };
+
+            var newStatus = allowedStatuses.FirstOrDefault(
+                s => string.Equals(
+                    s,
+                    appointment.Status.Trim(),
+                    StringComparison.OrdinalIgnoreCase));
+
+            if (newStatus == null)
+            {
+                return BadRequest(new
+                {
+                    message = "Status deyeri duzgun deyil."
+                });
+            }
+
+            existingAppointment.Status = newStatus;
         }
 
         await _context.SaveChangesAsync();
 
-        if (!User.IsInRole("Patient") &&
+        if (!isPatient &&
             !string.Equals(
                 oldStatus,
                 existingAppointment.Status,
                 StringComparison.OrdinalIgnoreCase))
         {
             await AddAppointmentNotificationAsync(
-                oldPatientId,
+                existingAppointment.PatientId,
                 existingAppointment.Id,
                 existingAppointment.Status);
         }
 
-        return NoContent();
+        return Ok(new
+        {
+            existingAppointment.Id,
+            existingAppointment.PatientId,
+            existingAppointment.DoctorId,
+            existingAppointment.AppointmentDate,
+            existingAppointment.Status,
+            existingAppointment.Notes,
+            existingAppointment.CreatedAt
+        });
     }
+
 
     // POST: api/appointment/1/complete
     [Authorize(Roles = "Admin,Doctor")]

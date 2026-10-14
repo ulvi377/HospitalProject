@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using System.Text;
 
 namespace Hospital.Controllers;
 
@@ -25,6 +26,90 @@ public class DoctorsController : ControllerBase
         _cloudinaryService = cloudinaryService;
     }
 
+    private static string CreateSlug(string value)
+    {
+        value = value.Trim().ToLowerInvariant();
+
+        value = value
+            .Replace("ə", "e")
+            .Replace("ı", "i")
+            .Replace("ö", "o")
+            .Replace("ü", "u")
+            .Replace("ğ", "g")
+            .Replace("ş", "s")
+            .Replace("ç", "c");
+
+        var result = new StringBuilder();
+        var previousWasDash = false;
+
+        foreach (var c in value)
+        {
+            if (char.IsLetterOrDigit(c))
+            {
+                result.Append(c);
+                previousWasDash = false;
+            }
+            else if (!previousWasDash && result.Length > 0)
+            {
+                result.Append('-');
+                previousWasDash = true;
+            }
+        }
+
+        return result.ToString().Trim('-');
+    }
+
+    private async Task<string> GenerateUniqueSlugAsync(
+        string fullName,
+        int? excludeDoctorId = null)
+    {
+        var baseSlug = CreateSlug(fullName);
+
+        if (string.IsNullOrWhiteSpace(baseSlug))
+        {
+            baseSlug = "doctor";
+        }
+
+        var slug = baseSlug;
+        var number = 2;
+
+        while (await _context.Doctors.AnyAsync(d =>
+            d.Slug == slug &&
+            (!excludeDoctorId.HasValue ||
+             d.Id != excludeDoctorId.Value)))
+        {
+            slug = $"{baseSlug}-{number}";
+            number++;
+        }
+
+        return slug;
+    }
+
+    private static object MapDoctor(Doctor d)
+    {
+        return new
+        {
+            d.Id,
+            d.FullName,
+            d.Slug,
+            d.Email,
+            d.PhoneNumber,
+            d.ImageUrl,
+            d.SpecialtyId,
+            Specialty = d.Specialty == null
+                ? null
+                : new
+                {
+                    d.Specialty.Id,
+                    d.Specialty.Name,
+                    d.Specialty.Description
+                },
+            d.IsActive
+        };
+    }
+
+    // GET: api/Doctors
+    // Admin butun hekimleri, diger istifadeciler aktiv hekimleri gorur.
     [AllowAnonymous]
     [HttpGet]
     public async Task<IActionResult> GetDoctors(
@@ -36,6 +121,11 @@ public class DoctorsController : ControllerBase
             .Include(d => d.Specialty)
             .AsQueryable();
 
+        if (!User.IsInRole("Admin"))
+        {
+            query = query.Where(d => d.IsActive);
+        }
+
         if (!string.IsNullOrWhiteSpace(search))
         {
             search = search.Trim();
@@ -44,17 +134,9 @@ public class DoctorsController : ControllerBase
                 d.FullName.Contains(search) ||
                 d.Email.Contains(search) ||
                 d.PhoneNumber.Contains(search) ||
+                d.Slug.Contains(search) ||
                 (d.Specialty != null &&
                  d.Specialty.Name.Contains(search)));
-        }
-
-        if (!string.IsNullOrWhiteSpace(specialty))
-        {
-            specialty = specialty.Trim();
-
-            query = query.Where(d =>
-                d.Specialty != null &&
-                d.Specialty.Name.Contains(specialty));
         }
 
         if (isActive.HasValue)
@@ -64,10 +146,12 @@ public class DoctorsController : ControllerBase
         }
 
         var doctors = await query
+            .OrderBy(d => d.FullName)
             .Select(d => new
             {
                 d.Id,
                 d.FullName,
+                d.Slug,
                 d.Email,
                 d.PhoneNumber,
                 d.ImageUrl,
@@ -87,32 +171,21 @@ public class DoctorsController : ControllerBase
         return Ok(doctors);
     }
 
+    // GET: api/Doctors/by-slug/dr-elvin-aliyev
     [AllowAnonymous]
-    [HttpGet("{id}")]
-    public async Task<IActionResult> GetDoctor(int id)
+    [HttpGet("by-slug/{slug}")]
+    public async Task<IActionResult> GetDoctorBySlug(string slug)
     {
-        var doctor = await _context.Doctors
+        var query = _context.Doctors
             .Include(d => d.Specialty)
-            .Where(d => d.Id == id)
-            .Select(d => new
-            {
-                d.Id,
-                d.FullName,
-                d.Email,
-                d.PhoneNumber,
-                d.ImageUrl,
-                d.SpecialtyId,
-                Specialty = d.Specialty == null
-                    ? null
-                    : new
-                    {
-                        d.Specialty.Id,
-                        d.Specialty.Name,
-                        d.Specialty.Description
-                    },
-                d.IsActive
-            })
-            .FirstOrDefaultAsync();
+            .Where(d => d.Slug == slug);
+
+        if (!User.IsInRole("Admin"))
+        {
+            query = query.Where(d => d.IsActive);
+        }
+
+        var doctor = await query.FirstOrDefaultAsync();
 
         if (doctor == null)
         {
@@ -122,14 +195,50 @@ public class DoctorsController : ControllerBase
             });
         }
 
-        return Ok(doctor);
+        return Ok(MapDoctor(doctor));
     }
 
+    // GET: api/Doctors/1
+    [AllowAnonymous]
+    [HttpGet("{id:int}")]
+    public async Task<IActionResult> GetDoctor(int id)
+    {
+        var query = _context.Doctors
+            .Include(d => d.Specialty)
+            .Where(d => d.Id == id);
+
+        if (!User.IsInRole("Admin"))
+        {
+            query = query.Where(d => d.IsActive);
+        }
+
+        var doctor = await query.FirstOrDefaultAsync();
+
+        if (doctor == null)
+        {
+            return NotFound(new
+            {
+                message = "Hekim tapilmadi."
+            });
+        }
+
+        return Ok(MapDoctor(doctor));
+    }
+
+    // POST: api/Doctors
     [Authorize(Roles = "Admin")]
     [HttpPost]
-    public async Task<ActionResult<Doctor>> CreateDoctor(
-        Doctor doctor)
+    public async Task<IActionResult> CreateDoctor(
+        [FromBody] Doctor doctor)
     {
+        if (string.IsNullOrWhiteSpace(doctor.FullName))
+        {
+            return BadRequest(new
+            {
+                message = "Hekimin adi bos ola bilmez."
+            });
+        }
+
         var specialtyExists = await _context.Specialties
             .AnyAsync(s => s.Id == doctor.SpecialtyId);
 
@@ -137,25 +246,36 @@ public class DoctorsController : ControllerBase
         {
             return BadRequest(new
             {
-                message = "Gosterilen Specialty movcud deyil."
+                message = "Gosterilen ixtisas movcud deyil."
             });
         }
+
+        doctor.Id = 0;
+        doctor.FullName = doctor.FullName.Trim();
+        doctor.Slug = await GenerateUniqueSlugAsync(
+            doctor.FullName);
 
         _context.Doctors.Add(doctor);
 
         await _context.SaveChangesAsync();
 
+        await _context.Entry(doctor)
+            .Reference(d => d.Specialty)
+            .LoadAsync();
+
         return CreatedAtAction(
-            nameof(GetDoctor),
-            new { id = doctor.Id },
-            doctor);
+            nameof(GetDoctorBySlug),
+            new { slug = doctor.Slug },
+            MapDoctor(doctor));
     }
 
-    [Authorize(Roles = "Admin")]
-    [HttpPut("{id}")]
-    public async Task<IActionResult> UpdateDoctor(
-        int id,
-        Doctor doctor)
+    
+// PUT: api/Doctors/1
+[Authorize(Roles = "Admin,Doctor")]
+[HttpPut("{id:int}")]
+public async Task<IActionResult> UpdateDoctor(
+    int id,
+    [FromBody] Doctor doctor)
     {
         if (id != doctor.Id)
         {
@@ -166,7 +286,7 @@ public class DoctorsController : ControllerBase
         }
 
         var existingDoctor = await _context.Doctors
-            .FindAsync(id);
+            .FirstOrDefaultAsync(d => d.Id == id);
 
         if (existingDoctor == null)
         {
@@ -176,35 +296,163 @@ public class DoctorsController : ControllerBase
             });
         }
 
-        var specialtyExists = await _context.Specialties
-            .AnyAsync(s => s.Id == doctor.SpecialtyId);
+        if (!User.IsInRole("Admin"))
+        {
+            var userId = User.FindFirst(
+                ClaimTypes.NameIdentifier)?.Value;
 
-        if (!specialtyExists)
+            var email = User.FindFirst(
+                ClaimTypes.Email)?.Value
+                ?? User.FindFirst("email")?.Value;
+
+            var isOwnProfile =
+                (!string.IsNullOrWhiteSpace(existingDoctor.ApplicationUserId)
+                 && !string.IsNullOrWhiteSpace(userId)
+                 && existingDoctor.ApplicationUserId == userId)
+                ||
+                (!string.IsNullOrWhiteSpace(email)
+                 && string.Equals(
+                     existingDoctor.Email,
+                     email,
+                     StringComparison.OrdinalIgnoreCase));
+
+            if (!isOwnProfile)
+            {
+                return Forbid();
+            }
+        }
+
+        if (!existingDoctor.IsActive)
         {
             return BadRequest(new
             {
-                message = "Gosterilen Specialty movcud deyil."
+                message = "Deaktiv hekim redakte edile bilmez."
             });
         }
 
-        existingDoctor.FullName = doctor.FullName;
+        if (string.IsNullOrWhiteSpace(doctor.FullName))
+        {
+            return BadRequest(new
+            {
+                message = "Hekimin adi bos ola bilmez."
+            });
+        }
+
+        if (User.IsInRole("Admin"))
+        {
+            var specialtyExists = await _context.Specialties
+                .AnyAsync(s => s.Id == doctor.SpecialtyId);
+
+            if (!specialtyExists)
+            {
+                return BadRequest(new
+                {
+                    message = "Gosterilen ixtisas movcud deyil."
+                });
+            }
+
+            existingDoctor.SpecialtyId = doctor.SpecialtyId;
+        }
+
+        var nameChanged = !string.Equals(
+            existingDoctor.FullName.Trim(),
+            doctor.FullName.Trim(),
+            StringComparison.OrdinalIgnoreCase);
+
+        existingDoctor.FullName = doctor.FullName.Trim();
         existingDoctor.Email = doctor.Email;
         existingDoctor.PhoneNumber = doctor.PhoneNumber;
-        existingDoctor.ImageUrl = doctor.ImageUrl;
-        existingDoctor.SpecialtyId = doctor.SpecialtyId;
-        existingDoctor.IsActive = doctor.IsActive;
+
+        // URL daxil edilibse, sekil linkini de yenile.
+        if (User.IsInRole("Admin") &&
+            doctor.ImageUrl != null &&
+            !string.IsNullOrWhiteSpace(doctor.ImageUrl))
+        {
+            var imageUrl = doctor.ImageUrl.Trim();
+
+            if (!Uri.TryCreate(
+                imageUrl,
+                UriKind.Absolute,
+                out var parsedUri) ||
+                (parsedUri.Scheme != Uri.UriSchemeHttp &&
+                 parsedUri.Scheme != Uri.UriSchemeHttps))
+            {
+                return BadRequest(new
+                {
+                    message = "Sekil URL-i duzgun HTTP/HTTPS linki olmalidir."
+                });
+            }
+
+            existingDoctor.ImageUrl = imageUrl;
+        }
+
+        if (nameChanged ||
+            string.IsNullOrWhiteSpace(existingDoctor.Slug))
+        {
+            existingDoctor.Slug =
+                await GenerateUniqueSlugAsync(
+                    existingDoctor.FullName,
+                    existingDoctor.Id);
+        }
 
         await _context.SaveChangesAsync();
 
-        return NoContent();
+        return Ok(new
+        {
+            message = "Hekim melumatlari yenilendi.",
+            id = existingDoctor.Id,
+            slug = existingDoctor.Slug,
+            imageUrl = existingDoctor.ImageUrl
+        });
     }
 
+
+    // POST: api/Doctors/generate-slugs
+    [Authorize(Roles = "Admin")]
+    [HttpPost("generate-slugs")]
+    public async Task<IActionResult> GenerateDoctorSlugs()
+    {
+        var doctors = await _context.Doctors
+            .OrderBy(d => d.Id)
+            .ToListAsync();
+
+        var updatedCount = 0;
+
+        foreach (var doctor in doctors)
+        {
+            if (string.IsNullOrWhiteSpace(doctor.Slug))
+            {
+                doctor.Slug = await GenerateUniqueSlugAsync(
+                    doctor.FullName,
+                    doctor.Id);
+
+                updatedCount++;
+            }
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            message = "Slug emeliyyati tamamlandi.",
+            updatedCount,
+            doctors = doctors.Select(d => new
+            {
+                d.Id,
+                d.FullName,
+                d.Slug,
+                d.IsActive
+            })
+        });
+    }
+
+    // POST: api/Doctors/1/image
     [Authorize(Roles = "Admin,Doctor")]
-    [HttpPost("{id}/image")]
+    [HttpPost("{id:int}/image")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> UploadDoctorImage(
-    int id,
-    IFormFile file)
+       int id,
+IFormFile file)
     {
         var doctor = await _context.Doctors
             .FirstOrDefaultAsync(d => d.Id == id);
@@ -217,8 +465,14 @@ public class DoctorsController : ControllerBase
             });
         }
 
-        // Admin istənilən həkimin şəklini dəyişə bilər.
-        // Doctor yalnız öz profil şəklini dəyişə bilər.
+        if (!doctor.IsActive)
+        {
+            return BadRequest(new
+            {
+                message = "Deaktiv hekim ucun sekil deyisdirile bilmez."
+            });
+        }
+
         if (!User.IsInRole("Admin"))
         {
             var userId = User.FindFirst(
@@ -311,12 +565,14 @@ public class DoctorsController : ControllerBase
         }
     }
 
+    // DELETE: api/Doctors/1
+    // Hekim fiziki silinmir; tibbi tarixceler qorunur.
     [Authorize(Roles = "Admin")]
-    [HttpDelete("{id}")]
+    [HttpDelete("{id:int}")]
     public async Task<IActionResult> DeleteDoctor(int id)
     {
         var doctor = await _context.Doctors
-            .FindAsync(id);
+            .FirstOrDefaultAsync(d => d.Id == id);
 
         if (doctor == null)
         {
@@ -326,10 +582,26 @@ public class DoctorsController : ControllerBase
             });
         }
 
-        _context.Doctors.Remove(doctor);
+        if (!doctor.IsActive)
+        {
+            return Ok(new
+            {
+                message = "Hekim artiq deaktiv edilib.",
+                id = doctor.Id,
+                isActive = false
+            });
+        }
+
+        doctor.IsActive = false;
 
         await _context.SaveChangesAsync();
 
-        return NoContent();
+        return Ok(new
+        {
+            message =
+                "Hekim deaktiv edildi. Tibbi tarixceler qorunur.",
+            id = doctor.Id,
+            isActive = false
+        });
     }
 }

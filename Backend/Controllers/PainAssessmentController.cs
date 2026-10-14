@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Hospital.Data;
 using Hospital.Models;
+using Hospital.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,10 +14,14 @@ namespace Hospital.Controllers;
 public class PainAssessmentController : ControllerBase
 {
     private readonly HospitalDbContext _context;
+    private readonly GeminiPainAnalysisService _geminiService;
 
-    public PainAssessmentController(HospitalDbContext context)
+    public PainAssessmentController(
+        HospitalDbContext context,
+        GeminiPainAnalysisService geminiService)
     {
         _context = context;
+        _geminiService = geminiService;
     }
 
     private string? CurrentUserId =>
@@ -68,20 +73,17 @@ public class PainAssessmentController : ControllerBase
         }
         else if (patientId.HasValue)
         {
-            query = query.Where(
-                p => p.PatientId == patientId.Value);
+            query = query.Where(p => p.PatientId == patientId.Value);
         }
 
         if (painAreaId.HasValue)
         {
-            query = query.Where(
-                p => p.PainAreaId == painAreaId.Value);
+            query = query.Where(p => p.PainAreaId == painAreaId.Value);
         }
 
         if (isEmergency.HasValue)
         {
-            query = query.Where(
-                p => p.IsEmergency == isEmergency.Value);
+            query = query.Where(p => p.IsEmergency == isEmergency.Value);
         }
 
         var assessments = await query
@@ -394,11 +396,10 @@ public class PainAssessmentController : ControllerBase
     }
 
     // POST: api/PainAssessment/analyze
-    // Ödənişsiz, qayda əsaslı ilkin məlumat sistemi.
-    // Bu sistem tibbi diaqnoz qoymur.
     [HttpPost("analyze")]
-    public IActionResult AnalyzePain(
-        [FromBody] PainAnalysisRequest request)
+    public async Task<IActionResult> AnalyzePain(
+        [FromBody] PainAnalysisRequest request,
+        CancellationToken cancellationToken)
     {
         if (request == null ||
             string.IsNullOrWhiteSpace(request.BodyPart) ||
@@ -423,11 +424,8 @@ public class PainAssessmentController : ControllerBase
             });
         }
 
-        var bodyPart = request.BodyPart.ToLowerInvariant();
-
-        var symptoms =
-            $"{request.Symptoms} {request.Description}"
-            .ToLowerInvariant();
+        var allSymptoms =
+            $"{request.Symptoms} {request.Description}";
 
         var emergencyKeywords = new[]
         {
@@ -450,137 +448,64 @@ public class PainAssessmentController : ControllerBase
 
         var urgentWarning =
             request.PainLevel >= 8 ||
-            emergencyKeywords.Any(x => symptoms.Contains(x));
+            emergencyKeywords.Any(keyword =>
+                allSymptoms.Contains(
+                    keyword,
+                    StringComparison.OrdinalIgnoreCase));
 
-        string possibleCauses;
-        string nextSteps;
-
-        if (bodyPart.Contains("head") ||
-            bodyPart.Contains("baş"))
+        try
         {
-            possibleCauses =
-                "Baş ağrısı gərginlik, miqren və ya başqa sağlamlıq " +
-                "problemləri ilə əlaqəli ola bilər. Təkcə bu məlumatla " +
-                "səbəbi müəyyən etmək mümkün deyil.";
+            var analysis = await _geminiService.AnalyzeAsync(
+                request.BodyPart.Trim(),
+                request.PainLevel,
+                request.Symptoms,
+                request.Description,
+                request.Duration,
+                cancellationToken);
 
-            nextSteps =
-                "Dincəl və vəziyyətini izlə. Qəfil başlayan çox güclü " +
-                "baş ağrısı, huş dəyişikliyi və ya qəfil nevroloji " +
-                "əlamətlər varsa, dərhal təcili tibbi yardım al.";
+            return Ok(new
+            {
+                analysis,
+
+                isEmergencyWarning = urgentWarning,
+
+                emergencyMessage = urgentWarning
+                    ? "Xəbərdarlıq: bildirilən ağrı səviyyəsi və ya simptomlar təcili qiymətləndirmə tələb edə bilər. Sinə ağrısı, nəfəs darlığı, huşun itməsi və ya qəfil nevroloji əlamətlər varsa, dərhal yerli təcili tibbi yardıma müraciət et."
+                    : null,
+
+                disclaimer =
+                    "Bu cavab Gemini AI tərəfindən yaradılan məlumatlandırıcı mətndir, tibbi diaqnoz deyil və həkim müayinəsini əvəz etmir."
+            });
         }
-        else if (bodyPart.Contains("chest") ||
-                 bodyPart.Contains("sinə"))
+        catch (HttpRequestException ex)
         {
-            possibleCauses =
-                "Sinə ağrısının müxtəlif səbəbləri ola bilər. " +
-                "Bəziləri əzələ ilə əlaqəli olsa da, ürək və ağciyər " +
-                "problemləri də mümkündür. Bu sistem səbəbi müəyyən etmir.";
+            // Səbəbi backend terminalında göstəririk.
+            Console.Error.WriteLine($"GEMINI HTTP ERROR: {ex}");
 
-            nextSteps =
-                "Yeni başlayan, davam edən və ya səbəbi bilinməyən " +
-                "sinə ağrısını təcili qiymətləndirmək lazımdır. " +
-                "Xüsusilə nəfəs darlığı, soyuq tər və ya huşsuzluq " +
-                "varsa, dərhal təcili yardıma müraciət et.";
+            return StatusCode(503, new
+            {
+                message =
+                    "Gemini API sorğusu uğursuz oldu. Backend terminalındakı xətanı yoxla."
+            });
         }
-        else if (bodyPart.Contains("back") ||
-                 bodyPart.Contains("bel") ||
-                 bodyPart.Contains("spine") ||
-                 bodyPart.Contains("kürək"))
+        catch (InvalidOperationException ex)
         {
-            possibleCauses =
-                "Bel və kürək ağrısı əzələ gərginliyi və ya digər " +
-                "onurğa problemləri ilə əlaqəli ola bilər. Dəqiq " +
-                "səbəb müayinə olmadan bilinmir.";
+            Console.Error.WriteLine($"GEMINI CONFIG ERROR: {ex}");
 
-            nextSteps =
-                "Ağrını artıran hərəkətlərdən çəkin. Ayaqlarda yeni " +
-                "zəiflik, qasıq nahiyəsində keyimə və ya sidik-nəcisə " +
-                "nəzarətin itməsi olarsa, təcili tibbi yardım al.";
+            return StatusCode(503, new
+            {
+                message =
+                    "Gemini analiz xidməti hazır deyil. Backend terminalındakı xətanı yoxla."
+            });
         }
-        else if (bodyPart.Contains("stomach") ||
-                 bodyPart.Contains("abdomen") ||
-                 bodyPart.Contains("qarın"))
+        catch (OperationCanceledException)
         {
-            possibleCauses =
-                "Qarın ağrısı həzm problemləri və başqa müxtəlif " +
-                "səbəblərlə bağlı ola bilər. Ağrının yeri, müddəti " +
-                "və əlavə simptomlar qiymətləndirmə üçün vacibdir.";
-
-            nextSteps =
-                "Ağrı güclüdürsə və ya artırsa, yaxud qarın sərtləşməsi, " +
-                "davamlı qusma, qanaxma və ya huşsuzluq varsa, " +
-                "təcili tibbi yardım al.";
+            return StatusCode(504, new
+            {
+                message =
+                    "Gemini sorğusu vaxtında cavab vermədi. Bir az sonra yenidən yoxla."
+            });
         }
-        else if (bodyPart.Contains("arm") ||
-                 bodyPart.Contains("leg") ||
-                 bodyPart.Contains("hand") ||
-                 bodyPart.Contains("foot") ||
-                 bodyPart.Contains("qol") ||
-                 bodyPart.Contains("ayaq") ||
-                 bodyPart.Contains("əl"))
-        {
-            possibleCauses =
-                "Qol, əl və ya ayaq ağrısı əzələ gərginliyi, zədə " +
-                "və ya digər səbəblərlə əlaqəli ola bilər. Bu məlumat " +
-                "dəqiq səbəbi təsdiqləmir.";
-
-            nextSteps =
-                "Nahiyəni əlavə zədədən qoru. Güclü şişkinlik, " +
-                "deformasiya, keyimə, hərəkət edə bilməmə və ya " +
-                "qəfil zəiflik varsa, tibbi yardım al.";
-        }
-        else
-        {
-            possibleCauses =
-                "Ağrı müxtəlif səbəblərlə əlaqəli ola bilər. " +
-                "Mövcud məlumatlar konkret səbəbi müəyyən etmək " +
-                "və ya diaqnoz qoymaq üçün kifayət deyil.";
-
-            nextSteps =
-                "Ağrı davam edərsə, təkrarlanarsa və ya gündəlik " +
-                "fəaliyyətinə mane olarsa, həkimə müraciət et.";
-        }
-
-        var severityText = request.PainLevel switch
-        {
-            <= 3 => "Aşağı ağrı səviyyəsi bildirilib.",
-            <= 6 => "Orta səviyyəli ağrı bildirilib.",
-            <= 7 => "Yüksək səviyyəli ağrı bildirilib.",
-            _ => "Çox yüksək ağrı səviyyəsi bildirilib."
-        };
-
-        var durationText =
-            string.IsNullOrWhiteSpace(request.Duration)
-                ? "Ağrının müddəti qeyd edilməyib."
-                : $"Bildirilən müddət: {request.Duration.Trim()}.";
-
-        var symptomsText =
-            string.IsNullOrWhiteSpace(request.Symptoms)
-                ? "Əlavə simptomlar qeyd edilməyib."
-                : $"Bildirilən simptomlar: {request.Symptoms.Trim()}.";
-
-        var analysis =
-            $"İlkin məlumat\n\n" +
-            $"Bədən nahiyəsi: {request.BodyPart.Trim()}\n" +
-            $"Ağrı səviyyəsi: {request.PainLevel}/10\n" +
-            $"{severityText}\n" +
-            $"{durationText}\n\n" +
-            $"Mümkün izahlar:\n{possibleCauses}\n\n" +
-            $"Növbəti addımlar:\n{nextSteps}\n\n" +
-            $"{symptomsText}\n\n" +
-            "Bu nəticə əvvəlcədən müəyyən edilmiş qaydalara əsaslanır; " +
-            "süni intellekt tərəfindən yaradılmır və tibbi diaqnoz deyil.";
-
-        return Ok(new
-        {
-            analysis,
-            isEmergencyWarning = urgentWarning,
-            emergencyMessage = urgentWarning
-                ? "Xəbərdarlıq: bildirilən ağrı səviyyəsi və ya simptomlar təcili qiymətləndirmə tələb edə bilər. Sinə ağrısı, nəfəs darlığı, huşun itməsi və ya qəfil nevroloji əlamətlər varsa, dərhal yerli təcili tibbi yardıma müraciət et."
-                : null,
-            disclaimer =
-                "Bu məlumat tibbi diaqnoz deyil və həkim müayinəsini əvəz etmir."
-        });
     }
 }
 

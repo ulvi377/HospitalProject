@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from "react";
 import api from "../../services/api";
 import "./Doctor.css";
@@ -16,6 +15,7 @@ function normalizeList(data) {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.$values)) return data.$values;
   if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.Items)) return data.Items;
   if (Array.isArray(data?.data)) return data.data;
   return [];
 }
@@ -32,7 +32,7 @@ function getErrorMessage(err) {
   }
 
   if (err.response?.status === 400) {
-    return "Sorğu qəbul edilmədi. Məlumatları və əlaqələri yoxlayın.";
+    return "Sorğu qəbul edilmədi. Məlumatları yoxlayın.";
   }
 
   if (err.response?.status === 401) {
@@ -44,14 +44,34 @@ function getErrorMessage(err) {
   }
 
   if (err.response?.status === 404) {
-    return "Həkim və ya API endpoint tapılmadı.";
+    return "Həkim və ya şəkil yükləmə endpoint-i tapılmadı.";
+  }
+
+  if (err.response?.status === 413) {
+    return "Şəkil çox böyükdür. Daha kiçik şəkil seçin.";
+  }
+
+  if (err.response?.status === 415) {
+    return "Şəkil formatı server tərəfindən qəbul edilmir.";
   }
 
   if (err.response?.status === 500) {
-    return "Server xətası. Həkimin başqa cədvəllərlə əlaqəsi ola bilər.";
+    return "Server xətası. Backend və Cloudinary parametrlərini yoxlayın.";
   }
 
   return "Əməliyyat alınmadı. Backend bağlantısını yoxlayın.";
+}
+
+function getDoctorImage(doctor) {
+  return (
+    doctor?.imageUrl ??
+    doctor?.ImageUrl ??
+    doctor?.profileImageUrl ??
+    doctor?.ProfileImageUrl ??
+    doctor?.photoUrl ??
+    doctor?.PhotoUrl ??
+    null
+  );
 }
 
 export default function Doctors() {
@@ -74,6 +94,9 @@ export default function Doctors() {
   const [editOpen, setEditOpen] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState(null);
   const [form, setForm] = useState(emptyForm);
+
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState("");
 
   async function loadDoctors() {
     setLoading(true);
@@ -119,6 +142,14 @@ export default function Doctors() {
     loadSpecialties();
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (imagePreview.startsWith("blob:")) {
+        URL.revokeObjectURL(imagePreview);
+      }
+    };
+  }, [imagePreview]);
+
   const filteredDoctors = useMemo(() => {
     const term = search.trim().toLowerCase();
 
@@ -129,8 +160,7 @@ export default function Doctors() {
           doctor.fullName ?? doctor.FullName,
           doctor.email ?? doctor.Email,
           doctor.phoneNumber ?? doctor.PhoneNumber,
-          doctor.specialty?.name ??
-            doctor.specialty?.Name,
+          doctor.specialty?.name ?? doctor.specialty?.Name,
         ].some((value) =>
           String(value ?? "").toLowerCase().includes(term)
         );
@@ -162,6 +192,8 @@ export default function Doctors() {
   ).length;
 
   function openEditModal(doctor) {
+    const currentImage = getDoctorImage(doctor) || "";
+
     setSelectedDoctor(doctor);
 
     setForm({
@@ -175,12 +207,14 @@ export default function Doctors() {
         doctor.specialty?.id ??
         doctor.specialty?.Id ??
         "",
-      imageUrl: doctor.imageUrl ?? doctor.ImageUrl ?? "",
+      imageUrl: currentImage,
       isActive: Boolean(
         doctor.isActive ?? doctor.IsActive
       ),
     });
 
+    setSelectedImage(null);
+    setImagePreview(currentImage);
     setError("");
     setSuccess("");
     setEditOpen(true);
@@ -192,6 +226,8 @@ export default function Doctors() {
     setEditOpen(false);
     setSelectedDoctor(null);
     setForm(emptyForm);
+    setSelectedImage(null);
+    setImagePreview("");
     setError("");
   }
 
@@ -202,6 +238,41 @@ export default function Doctors() {
       ...previous,
       [name]: type === "checkbox" ? checked : value,
     }));
+
+    if (name === "imageUrl") {
+      if (imagePreview.startsWith("blob:")) {
+        URL.revokeObjectURL(imagePreview);
+      }
+
+      setSelectedImage(null);
+      setImagePreview(value);
+    }
+  }
+
+  function handleImageChange(event) {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError("Zəhmət olmasa, şəkil faylı seçin.");
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Şəkil 5 MB-dan böyük olmamalıdır.");
+      event.target.value = "";
+      return;
+    }
+
+    if (imagePreview.startsWith("blob:")) {
+      URL.revokeObjectURL(imagePreview);
+    }
+
+    setError("");
+    setSelectedImage(file);
+    setImagePreview(URL.createObjectURL(file));
   }
 
   async function handleUpdateDoctor(event) {
@@ -211,6 +282,11 @@ export default function Doctors() {
 
     const doctorId =
       selectedDoctor.id ?? selectedDoctor.Id;
+
+    if (!doctorId) {
+      setError("Həkimin ID-si tapılmadı.");
+      return;
+    }
 
     if (!form.fullName.trim()) {
       setError("Həkimin adı boş ola bilməz.");
@@ -223,7 +299,7 @@ export default function Doctors() {
     }
 
     if (!form.specialtyId) {
-      setError("Zəhmət olmasa həkimin ixtisasını seçin.");
+      setError("Zəhmət olmasa, həkimin ixtisasını seçin.");
       return;
     }
 
@@ -231,31 +307,68 @@ export default function Doctors() {
     setError("");
     setSuccess("");
 
-    const payload = {
-      id: doctorId,
-      fullName: form.fullName.trim(),
-      email: form.email.trim(),
-      phoneNumber: form.phoneNumber.trim(),
-      specialtyId: Number(form.specialtyId),
-      imageUrl: form.imageUrl.trim(),
-      isActive: form.isActive,
-    };
-
     try {
+      // 1. Həkimin adi məlumatlarını yenilə.
+      const payload = {
+        id: doctorId,
+        fullName: form.fullName.trim(),
+        email: form.email.trim(),
+        phoneNumber: form.phoneNumber.trim(),
+        specialtyId: Number(form.specialtyId),
+        imageUrl:
+          form.imageUrl.trim() ||
+          getDoctorImage(selectedDoctor) ||
+          "",
+        isActive: form.isActive,
+      };
+
       await api.put(`/Doctors/${doctorId}`, payload);
 
+      // 2. Yeni şəkil seçilibsə, ayrıca backend-ə göndər.
+      if (selectedImage) {
+        const formData = new FormData();
+        formData.append("file", selectedImage);
+
+        await api.post(
+          `/Doctors/${doctorId}/image`,
+          formData,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+          }
+        );
+      }
+
+      // 3. Yükləmə uğurludursa, siyahını yenilə.
       setEditOpen(false);
       setSelectedDoctor(null);
       setForm(emptyForm);
-      setSuccess("Həkim məlumatları uğurla yeniləndi.");
+      setSelectedImage(null);
+      setImagePreview("");
+
+      setSuccess(
+        selectedImage
+          ? "Həkim məlumatları və şəkli uğurla yeniləndi."
+          : "Həkim məlumatları uğurla yeniləndi."
+      );
 
       await loadDoctors();
     } catch (err) {
       console.error(
-        "Həkim yeniləmə xətası:",
+        "Həkim və ya şəkil yeniləmə xətası:",
         err.response?.data ?? err
       );
+
       setError(getErrorMessage(err));
+
+      // Məlumat PUT ilə yenilənmiş ola bilər; siyahını yoxla.
+      try {
+        const response = await api.get("/Doctors");
+        setDoctors(normalizeList(response.data));
+      } catch {
+        // Əsas xətanı saxla.
+      }
     } finally {
       setSaving(false);
     }
@@ -330,10 +443,7 @@ export default function Doctors() {
       {error && (
         <div className="doctor-notice doctor-notice-error">
           <span>{error}</span>
-          <button
-            type="button"
-            onClick={() => setError("")}
-          >
+          <button type="button" onClick={() => setError("")}>
             ×
           </button>
         </div>
@@ -342,10 +452,7 @@ export default function Doctors() {
       {success && (
         <div className="doctor-notice doctor-notice-success">
           <span>{success}</span>
-          <button
-            type="button"
-            onClick={() => setSuccess("")}
-          >
+          <button type="button" onClick={() => setSuccess("")}>
             ×
           </button>
         </div>
@@ -450,10 +557,12 @@ export default function Doctors() {
                   const email = doctor.email ?? doctor.Email;
                   const phone =
                     doctor.phoneNumber ?? doctor.PhoneNumber;
-                  const imageUrl =
-                    doctor.imageUrl ?? doctor.ImageUrl;
+                  const imageUrl = getDoctorImage(doctor);
                   const isActive =
                     doctor.isActive ?? doctor.IsActive ?? false;
+
+                  const specialtyId =
+                    doctor.specialtyId ?? doctor.SpecialtyId;
 
                   const specialtyName =
                     doctor.specialty?.name ??
@@ -461,11 +570,13 @@ export default function Doctors() {
                     specialties.find(
                       (item) =>
                         String(item.id ?? item.Id) ===
-                        String(
-                          doctor.specialtyId ??
-                          doctor.SpecialtyId
-                        )
+                        String(specialtyId)
                     )?.name ??
+                    specialties.find(
+                      (item) =>
+                        String(item.id ?? item.Id) ===
+                        String(specialtyId)
+                    )?.Name ??
                     "Təyin edilməyib";
 
                   return (
@@ -476,6 +587,9 @@ export default function Doctors() {
                             <img
                               src={imageUrl}
                               alt={fullName}
+                              onError={(event) => {
+                                event.currentTarget.style.display = "none";
+                              }}
                             />
                           ) : (
                             <div className="doctor-avatar">
@@ -566,9 +680,11 @@ export default function Doctors() {
                 <span className="doctor-modal-eyebrow">
                   HƏKİM İDARƏETMƏSİ
                 </span>
+
                 <h2 id="doctor-edit-title">
                   Həkimi redaktə et
                 </h2>
+
                 <p>
                   ID: {selectedDoctor.id ?? selectedDoctor.Id}
                 </p>
@@ -599,6 +715,7 @@ export default function Doctors() {
                 <label htmlFor="doctor-fullName">
                   Ad və soyad *
                 </label>
+
                 <input
                   id="doctor-fullName"
                   name="fullName"
@@ -611,6 +728,7 @@ export default function Doctors() {
 
               <div className="doctor-form-field">
                 <label htmlFor="doctor-email">Email *</label>
+
                 <input
                   id="doctor-email"
                   name="email"
@@ -623,9 +741,8 @@ export default function Doctors() {
               </div>
 
               <div className="doctor-form-field">
-                <label htmlFor="doctor-phone">
-                  Telefon
-                </label>
+                <label htmlFor="doctor-phone">Telefon</label>
+
                 <input
                   id="doctor-phone"
                   name="phoneNumber"
@@ -666,18 +783,123 @@ export default function Doctors() {
               </div>
 
               <div className="doctor-form-field doctor-form-full">
-                <label htmlFor="doctor-imageUrl">
-                  Şəkil URL-i
+                <label htmlFor="doctor-image-file">
+                  Həkimin şəklini seç
                 </label>
+
+                <input
+                  id="doctor-image-file"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  disabled={saving}
+                />
+
+                <small>
+                  JPG, PNG və ya WEBP formatı. Maksimum 5 MB.
+                </small>
+              </div>
+
+              {imagePreview && (
+                <div className="doctor-form-field doctor-form-full">
+                  <label>Şəkil önizləməsi</label>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 16,
+                      flexWrap: "wrap",
+                      padding: 14,
+                      border: "1px solid #e1e8f2",
+                      borderRadius: 12,
+                    }}
+                  >
+                    <img
+                      src={imagePreview}
+                      alt="Həkim şəkli önizləməsi"
+                      onError={(event) => {
+                        event.currentTarget.style.opacity = "0.35";
+                      }}
+                      style={{
+                        width: 100,
+                        height: 100,
+                        objectFit: "cover",
+                        objectPosition: "center top",
+                        borderRadius: 12,
+                        background: "#edf2f9",
+                      }}
+                    />
+
+                    <div>
+                      <strong style={{ display: "block" }}>
+                        {selectedImage
+                          ? "Yeni şəkil seçilib"
+                          : "Hazırkı şəkil"}
+                      </strong>
+
+                      <small style={{ display: "block", marginTop: 6 }}>
+                        {selectedImage
+                          ? selectedImage.name
+                          : "Yeni şəkil seçərək dəyişə bilərsiniz."}
+                      </small>
+
+                      {selectedImage && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (imagePreview.startsWith("blob:")) {
+                              URL.revokeObjectURL(imagePreview);
+                            }
+
+                            setSelectedImage(null);
+
+                            const oldImage =
+                              getDoctorImage(selectedDoctor) || "";
+
+                            setImagePreview(oldImage);
+
+                            setForm((previous) => ({
+                              ...previous,
+                              imageUrl: oldImage,
+                            }));
+                          }}
+                          disabled={saving}
+                          style={{
+                            marginTop: 10,
+                            padding: "6px 10px",
+                            border: "1px solid #e1e8f2",
+                            borderRadius: 8,
+                            background: "#fff",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Seçimi ləğv et
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="doctor-form-field doctor-form-full">
+                <label htmlFor="doctor-imageUrl">
+                  Şəkil URL-i (istəyə bağlı)
+                </label>
+
                 <input
                   id="doctor-imageUrl"
                   name="imageUrl"
                   type="url"
                   value={form.imageUrl}
                   onChange={handleChange}
-                  placeholder="https://example.com/doctor.jpg"
+                  placeholder="https://res.cloudinary.com/..."
                   maxLength={1000}
                 />
+
+                <small>
+                  Fayl seçsəniz, yüklənən yeni şəkil bu URL-i əvəz edəcək.
+                </small>
               </div>
 
               <label className="doctor-active-toggle">
@@ -687,6 +909,7 @@ export default function Doctors() {
                   checked={form.isActive}
                   onChange={handleChange}
                 />
+
                 <span>Həkim aktivdir</span>
               </label>
 
@@ -706,7 +929,9 @@ export default function Doctors() {
                   disabled={saving || specialtiesLoading}
                 >
                   {saving
-                    ? "Yadda saxlanılır..."
+                    ? selectedImage
+                      ? "Şəkil yüklənir..."
+                      : "Yadda saxlanılır..."
                     : "Dəyişiklikləri yadda saxla"}
                 </button>
               </div>

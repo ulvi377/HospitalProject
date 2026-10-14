@@ -1,7 +1,7 @@
-
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 
 import RequireAdmin from "./components/auth/RequireAdmin";
+import ScrollToTop from "./components/ScrollToTop";
 
 import PublicLayout from "./layouts/PublicLayout";
 import AdminLayout from "./layouts/AdminLayout";
@@ -26,8 +26,9 @@ import AdminPatients from "./pages/admin/Patients";
 import AdminSpecialties from "./pages/admin/Specialties";
 import AdminDoctorSchedules from "./pages/admin/DoctorSchedules";
 import AdminAppointments from "./pages/admin/Appointments";
-import AdminPainAreas from "./pages/admin/PainAreas";
 import AdminUsers from "./pages/admin/Users";
+import AdminDoctorAbsenceRequests from "./pages/admin/DoctorAbsenceRequests";
+import AdminRatings from "./pages/admin/Ratings";
 
 // Patient pages
 import PatientDashboard from "./pages/patient/Dashboard";
@@ -39,6 +40,7 @@ import PatientNotifications from "./pages/patient/Notifications";
 import PatientPainAssessment from "./pages/patient/PainAssessment";
 import PatientPrescriptions from "./pages/patient/Prescriptions";
 import PatientProfile from "./pages/patient/Profile";
+import PatientRatings from "./pages/patient/Ratings";
 
 // Doctor pages
 import DoctorDashboard from "./pages/doctor/Dashboard";
@@ -48,13 +50,16 @@ import DoctorPatientDetails from "./pages/doctor/PatientDetails";
 import DoctorProfile from "./pages/doctor/Profile";
 import DoctorDetailsPage from "./pages/doctor/DoctorDetails";
 import DoctorMedicalRecords from "./pages/doctor/MedicalRecords";
-import DoctorPainAssessments from "./pages/doctor/PainAssessments";
+import DoctorRatings from "./pages/doctor/Ratings";
 import DoctorPrescriptions from "./pages/doctor/Prescriptions";
 import DoctorSchedule from "./pages/doctor/Schedule";
+import DoctorAbsenceRequests from "./pages/doctor/AbsenceRequests";
 
 function App() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
+
       <Routes>
         {/* PUBLIC PAGES */}
         <Route element={<PublicLayout />}>
@@ -86,8 +91,12 @@ function App() {
             element={<AdminDoctorSchedules />}
           />
           <Route path="appointments" element={<AdminAppointments />} />
-          <Route path="pain-areas" element={<AdminPainAreas />} />
           <Route path="users" element={<AdminUsers />} />
+          <Route
+            path="doctor-absence-requests"
+            element={<AdminDoctorAbsenceRequests />}
+          />
+          <Route path="reviews" element={<AdminRatings />} />
         </Route>
 
         {/* DOCTOR PAGES */}
@@ -105,21 +114,25 @@ function App() {
             path="medical-records"
             element={<DoctorMedicalRecords />}
           />
-          <Route
-            path="pain-assessments"
-            element={<DoctorPainAssessments />}
-          />
+          <Route path="ratings" element={<DoctorRatings />} />
           <Route
             path="prescriptions"
             element={<DoctorPrescriptions />}
           />
           <Route path="schedule" element={<DoctorSchedule />} />
+          <Route
+            path="absence-requests"
+            element={<DoctorAbsenceRequests />}
+          />
         </Route>
 
         {/* PATIENT PAGES */}
         <Route path="/patient" element={<PatientLayout />}>
           <Route index element={<PatientDashboard />} />
-          <Route path="appointments" element={<PatientAppointments />} />
+          <Route
+            path="appointments"
+            element={<PatientAppointments />}
+          />
           <Route
             path="book-appointment"
             element={<PatientBookAppointment />}
@@ -142,9 +155,10 @@ function App() {
             element={<PatientPrescriptions />}
           />
           <Route path="profile" element={<PatientProfile />} />
+          <Route path="ratings" element={<PatientRatings />} />
         </Route>
 
-        {/* 404 */}
+        {/* 404 PAGE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>

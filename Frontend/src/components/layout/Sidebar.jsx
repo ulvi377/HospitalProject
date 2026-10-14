@@ -1,4 +1,3 @@
-
 import { useContext, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
@@ -7,13 +6,14 @@ import {
   Users,
   Building2,
   CalendarDays,
+  CalendarX,
   ClipboardList,
-  HeartPulse,
   UserRound,
   LogOut,
   ShieldCheck,
   X,
   ArrowRight,
+  Star,
 } from "lucide-react";
 import { AuthContext } from "../../context/AuthContext";
 
@@ -22,9 +22,26 @@ const menuItems = [
   { label: "Doctors", path: "/admin/doctors", icon: Stethoscope },
   { label: "Patients", path: "/admin/patients", icon: Users },
   { label: "Specialties", path: "/admin/specialties", icon: Building2 },
-  { label: "Doctor Schedules", path: "/admin/doctor-schedules", icon: CalendarDays },
-  { label: "Appointments", path: "/admin/appointments", icon: ClipboardList },
-  { label: "Pain Areas", path: "/admin/pain-areas", icon: HeartPulse },
+  {
+    label: "Doctor Schedules",
+    path: "/admin/doctor-schedules",
+    icon: CalendarDays,
+  },
+  {
+    label: "Doctor Absence Requests",
+    path: "/admin/doctor-absence-requests",
+    icon: CalendarX,
+  },
+  {
+    label: "Appointments",
+    path: "/admin/appointments",
+    icon: ClipboardList,
+  },
+  {
+    label: "Reviews",
+    path: "/admin/reviews",
+    icon: Star,
+  },
   { label: "Users", path: "/admin/users", icon: UserRound },
 ];
 
@@ -668,10 +685,7 @@ function Sidebar() {
                 <small>Log out of your account</small>
               </span>
 
-              <ArrowRight
-                className="logout-arrow"
-                size={15}
-              />
+              <ArrowRight className="logout-arrow" size={15} />
             </button>
           </div>
 
