@@ -314,7 +314,6 @@ function getStatusClass(status) {
 function formatDate(value) {
   if (!value) return "Tarix göstərilməyib";
 
-  // Tarix YYYY-MM-DD şəklindədirsə, günü dəyişmədən göstər.
   if (typeof value === "string") {
     const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
 
@@ -340,7 +339,6 @@ function formatDate(value) {
 function formatTime(value) {
   if (!value) return "--:--";
 
-  // Saat ayrıca gəlirsə: 9:30, 09:30 və ya 09:30:00.
   if (typeof value === "string") {
     const timeMatch = value.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
 
@@ -381,6 +379,69 @@ function extractArray(response) {
   if (Array.isArray(data?.items?.$values)) return data.items.$values;
 
   return [];
+}
+
+function getAppointmentDate(item) {
+  return (
+    item?.appointmentDate ??
+    item?.date ??
+    item?.startDate ??
+    item?.startTime ??
+    null
+  );
+}
+
+function getAppointmentTime(item) {
+  return (
+    item?.appointmentTime ??
+    item?.time ??
+    item?.startTime ??
+    item?.appointmentDate ??
+    item?.date ??
+    null
+  );
+}
+
+// Tarix və saatı müqayisə etmək üçün təhlükəsiz rəqəm qaytarır.
+function getSortTimestamp(item) {
+  const dateValue = getAppointmentDate(item);
+
+  if (!dateValue) return Number.MAX_SAFE_INTEGER;
+
+  // Əgər tarix YYYY-MM-DD formatındadırsa, ayrıca saatı da nəzərə al.
+  const dateText = String(dateValue);
+  const dateMatch = dateText.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  if (dateMatch) {
+    const timeValue =
+      item?.appointmentTime ??
+      item?.time ??
+      item?.startTime ??
+      "00:00";
+
+    const timeMatch = String(timeValue).match(
+      /(\d{1,2}):(\d{2})(?::(\d{2}))?/
+    );
+
+    const hour = timeMatch ? Number(timeMatch[1]) : 0;
+    const minute = timeMatch ? Number(timeMatch[2]) : 0;
+    const second = timeMatch ? Number(timeMatch[3] || 0) : 0;
+
+    return new Date(
+      Number(dateMatch[1]),
+      Number(dateMatch[2]) - 1,
+      Number(dateMatch[3]),
+      hour,
+      minute,
+      second
+    ).getTime();
+  }
+
+  const timestamp = new Date(dateValue).getTime();
+
+  return Number.isNaN(timestamp)
+    ? Number.MAX_SAFE_INTEGER
+    : timestamp;
 }
 
 export default function Appointments() {
@@ -438,6 +499,7 @@ export default function Appointments() {
 
     const pending = appointments.filter((item) => {
       const status = String(item?.status || "pending").toLowerCase();
+
       return ![
         "confirmed",
         "approved",
@@ -457,27 +519,11 @@ export default function Appointments() {
     return { total, pending, confirmed };
   }, [appointments]);
 
-  function getAppointmentDate(item) {
-    return (
-      item?.appointmentDate ??
-      item?.date ??
-      item?.startDate ??
-      item?.startTime ??
-      null
-    );
-  }
-
-  function getAppointmentTime(item) {
-    // Ayrı saat sahəsi varsa, ilk növbədə onu istifadə et.
-    return (
-      item?.appointmentTime ??
-      item?.time ??
-      item?.startTime ??
-      item?.appointmentDate ??
-      item?.date ??
-      null
-    );
-  }
+  const sortedAppointments = useMemo(() => {
+    return [...appointments].sort((a, b) => {
+      return getSortTimestamp(b) - getSortTimestamp(a);
+    });
+  }, [appointments]);
 
   return (
     <div className="patient-appointments">
@@ -545,11 +591,13 @@ export default function Appointments() {
         <div className="empty">
           <CalendarDays size={42} />
           <h3>Hələ qəbulunuz yoxdur</h3>
-          <p>Həkim qəbuluna yazıldıqdan sonra məlumatlar burada görünəcək.</p>
+          <p>
+            Həkim qəbuluna yazıldıqdan sonra məlumatlar burada görünəcək.
+          </p>
         </div>
       ) : (
         <div className="panel">
-          {appointments.map((item, index) => {
+          {sortedAppointments.map((item, index) => {
             const status = item?.status || "Pending";
             const appointmentDate = getAppointmentDate(item);
             const appointmentTime = getAppointmentTime(item);

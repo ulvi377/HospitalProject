@@ -89,7 +89,7 @@ const colorClasses = {
 const Home = () => {
   return (
     <main className="home-page overflow-hidden">
-     ```jsx
+    
 <style>{`
   .home-page {
     --home-bg: #f5f8fd;

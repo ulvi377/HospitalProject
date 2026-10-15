@@ -269,6 +269,7 @@ public class AppointmentController : ControllerBase
                 a.CreatedAt
             })
             .OrderBy(a => a.AppointmentDate)
+            .ThenByDescending(a => a.Id)
             .ToListAsync();
 
         return Ok(appointments);

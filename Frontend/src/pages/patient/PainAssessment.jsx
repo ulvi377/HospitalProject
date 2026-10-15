@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import api from "../../services/api";
 import "./PainAssessment.css";
+
 const PAIN_STORAGE_KEY = "hospital_pain_assessment";
 
 function getSavedPainAssessment() {
@@ -37,6 +38,7 @@ function getSavedPainAssessment() {
     return {};
   }
 }
+
 const symptomOptions = [
   "Hərarət",
   "Ürəkbulanma",
@@ -88,7 +90,7 @@ function formatInline(text) {
 
 function AnalysisContent({ text }) {
   const normalized = text
-    .replace(/\\([*#_])/g, "$1")
+    .replace(/\\([\*#_])/g, "$1")
     .replace(/\r\n/g, "\n");
 
   const lines = normalized.split("\n");
@@ -372,17 +374,32 @@ function ModelFallback() {
 }
 
 export default function PainAssessment() {
-  const [region, setRegion] = useState("");
+  const navigate = useNavigate();
+
+  // Əvvəl saxlanılmış məlumatları səhifə açılarkən yüklə.
+  const [savedAssessment] = useState(() => getSavedPainAssessment());
+
+  const [region, setRegion] = useState(savedAssessment.region || "");
   const [selectedPoint, setSelectedPoint] = useState(null);
-  const [severity, setSeverity] = useState(5);
-  const [duration, setDuration] = useState("Bu gün başlayıb");
-  const [painType, setPainType] = useState("Sızıltı");
-  const [symptoms, setSymptoms] = useState([]);
-  const [notes, setNotes] = useState("");
+  const [severity, setSeverity] = useState(savedAssessment.severity ?? 5);
+  const [duration, setDuration] = useState(
+    savedAssessment.duration || "Bu gün başlayıb"
+  );
+  const [painType, setPainType] = useState(
+    savedAssessment.painType || "Sızıltı"
+  );
+  const [symptoms, setSymptoms] = useState(
+    Array.isArray(savedAssessment.symptoms)
+      ? savedAssessment.symptoms
+      : []
+  );
+  const [notes, setNotes] = useState(savedAssessment.notes || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [result, setResult] = useState("");
-  const [emergencyMessage, setEmergencyMessage] = useState("");
+  const [result, setResult] = useState(savedAssessment.result || "");
+  const [emergencyMessage, setEmergencyMessage] = useState(
+    savedAssessment.emergencyMessage || ""
+  );
 
   const urgent = symptoms.some((item) =>
     urgentSymptoms.includes(item)
@@ -412,7 +429,6 @@ export default function PainAssessment() {
     event.preventDefault();
 
     setError("");
-    setResult("");
     setEmergencyMessage("");
 
     if (!region) {
@@ -446,14 +462,34 @@ export default function PainAssessment() {
         }
       );
 
-      setResult(
+      const analysis =
         response.data?.analysis ||
-          "AI analiz nəticəsi qaytarılmadı."
-      );
+        "AI analiz nəticəsi qaytarılmadı.";
 
-      if (response.data?.emergencyMessage) {
-        setEmergencyMessage(
-          response.data.emergencyMessage
+      const savedResult = {
+        region,
+        severity: Number(severity),
+        duration,
+        painType,
+        symptoms,
+        notes,
+        result: analysis,
+        emergencyMessage: response.data?.emergencyMessage || "",
+      };
+
+      setResult(analysis);
+      setEmergencyMessage(savedResult.emergencyMessage);
+
+      // AI cavabını və analiz üçün daxil edilmiş məlumatları saxla.
+      try {
+        localStorage.setItem(
+          PAIN_STORAGE_KEY,
+          JSON.stringify(savedResult)
+        );
+      } catch (storageError) {
+        console.error(
+          "AI analiz nəticəsi saxlanılmadı:",
+          storageError
         );
       }
     } catch (err) {
@@ -467,6 +503,16 @@ export default function PainAssessment() {
   };
 
   const resetForm = () => {
+    // Formanı sıfırlayanda saxlanmış nəticəni də sil.
+    try {
+      localStorage.removeItem(PAIN_STORAGE_KEY);
+    } catch (storageError) {
+      console.error(
+        "Saxlanmış AI analizi silinmədi:",
+        storageError
+      );
+    }
+
     setRegion("");
     setSelectedPoint(null);
     setSeverity(5);
@@ -966,6 +1012,15 @@ export default function PainAssessment() {
               </p>
             </div>
           </div>
+
+          <button
+            type="button"
+            className="pain-doctors-btn"
+            onClick={() => navigate("/patient/doctors")}
+          >
+            <span>Həkimlərə yönləndir</span>
+            <ChevronRight size={19} />
+          </button>
         </section>
       )}
 
