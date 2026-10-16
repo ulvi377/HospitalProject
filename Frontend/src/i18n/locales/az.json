@@ -1,3 +1,4 @@
+
 {
   "brand": "Avropa Hospital",
   "home": "Ana səhifə",
@@ -47,6 +48,32 @@
   "myReviews": "Rəylərim",
   "healthMatters": "Sağlamlığınız önəmlidir",
   "healthDescription": "Sağlamlığınızla bağlı məlumatlarınızı buradan izləyin.",
+
+  "workspace": "İŞ SAHƏSİ",
+  "secureWorkspace": "Təhlükəsiz iş sahəsi",
+  "adminAccessEnabled": "Admin girişi aktivdir",
+  "signOut": "Hesabdan çıx",
+  "logoutDescription": "Hesabınızdan çıxış edin",
+  "confirmLogoutTitle": "Hesabdan çıxmaq istəyirsiniz?",
+  "confirmLogoutMessage": "Hospital admin hesabınızdan çıxmaq istədiyinizə əminsiniz?",
+  "doctorSchedules": "Həkim cədvəlləri",
+  "doctorAbsenceRequests": "Həkimlərin işdə olmama müraciətləri",
+  "reviews": "Rəylər",
+  "users": "İstifadəçilər",
+
+  "doctorWorkspace": "Həkim paneli",
+  "medicalPortal": "Tibb portalı",
+  "doctorAccount": "Həkim hesabı",
+  "doctorNavigation": "Həkim menyusu",
+  "workspaceTitle": "HƏKİM PANELİ",
+  "medicalRecords": "Tibbi qeydlər",
+  "schedule": "İş qrafiki",
+  "absenceRequests": "İşdə olmama sorğuları",
+  "pendingAppointments": "gözləyən qəbul",
+  "signOutTitle": "Hesabdan çıxılsın?",
+  "signOutMessage": "Həkim hesabınızdan çıxmaq istədiyinizə əminsiniz?",
+  "close": "Bağla",
+
   "pain": {
     "heroTitle": "Sağlamlığını anlamağa başla.",
     "heroDescription": "Simptomlarını qeyd et, ağrıyan nahiyəni seç və süni intellekt dəstəyi ilə məlumatlandırıcı analiz əldə et.",
@@ -138,6 +165,14 @@
       "suddenWeakness": "Qəfil zəiflik və ya keyimə",
       "swelling": "Şişkinlik",
       "numbness": "Uyuşma"
-    }
+    },
+    "painTypeDescription": "Ağrının növü",
+    "severityDescription": "Ağrı səviyyəsi",
+    "painDescriptionPrefix": "Ağrının növü",
+    "stepBody": "01 / BƏDƏN XƏRİTƏSİ",
+    "stepInformation": "02 / MƏLUMATLAR",
+    "healthInsights": "Sağlamlıq haqqında məlumatlar",
+    "symptomEvaluation": "Simptomların qiymətləndirilməsi",
+    "personalizedInformation": "Fərdiləşdirilmiş məlumatlar"
   }
 }

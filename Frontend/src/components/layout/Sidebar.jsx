@@ -1,6 +1,9 @@
+
 import { useContext, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
+  Languages,
   LayoutDashboard,
   Stethoscope,
   Users,
@@ -18,31 +21,31 @@ import {
 import { AuthContext } from "../../context/AuthContext";
 
 const menuItems = [
-  { label: "Dashboard", path: "/admin", icon: LayoutDashboard },
-  { label: "Doctors", path: "/admin/doctors", icon: Stethoscope },
-  { label: "Patients", path: "/admin/patients", icon: Users },
-  { label: "Specialties", path: "/admin/specialties", icon: Building2 },
+  { label: "dashboard", path: "/admin", icon: LayoutDashboard },
+  { label: "doctors", path: "/admin/doctors", icon: Stethoscope },
+  { label: "patients", path: "/admin/patients", icon: Users },
+  { label: "specialties", path: "/admin/specialties", icon: Building2 },
   {
-    label: "Doctor Schedules",
+    label: "doctorSchedules",
     path: "/admin/doctor-schedules",
     icon: CalendarDays,
   },
   {
-    label: "Doctor Absence Requests",
+    label: "doctorAbsenceRequests",
     path: "/admin/doctor-absence-requests",
     icon: CalendarX,
   },
   {
-    label: "Appointments",
+    label: "appointments",
     path: "/admin/appointments",
     icon: ClipboardList,
   },
   {
-    label: "Reviews",
+    label: "reviews",
     path: "/admin/reviews",
     icon: Star,
   },
-  { label: "Users", path: "/admin/users", icon: UserRound },
+  { label: "users", path: "/admin/users", icon: UserRound },
 ];
 
 const styles = `
@@ -114,6 +117,54 @@ const styles = `
   flex-shrink: 0;
   margin: 0 4px 11px;
   background: rgba(255,255,255,.09);
+}
+
+.admin-sidebar .sidebar-language {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 5px 12px;
+  flex-shrink: 0;
+}
+
+.admin-sidebar .language-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #a8b8d0;
+  font-size: 11px;
+}
+
+.admin-sidebar .language-buttons {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 9px;
+  background: #ffffff0c;
+  border: 1px solid #ffffff15;
+}
+
+.admin-sidebar .language-button {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  color: #a8b8d0;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .2s ease, color .2s ease;
+}
+
+.admin-sidebar .language-button.active {
+  color: #fff;
+  background: #3568d4;
+}
+
+.admin-sidebar .language-button:focus-visible {
+  outline: 2px solid #8eb4ff;
+  outline-offset: 2px;
 }
 
 .admin-sidebar .sidebar-nav {
@@ -579,7 +630,22 @@ const styles = `
 function Sidebar() {
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
   const [confirmLogout, setConfirmLogout] = useState(false);
+
+  const currentLanguage = i18n.resolvedLanguage?.startsWith("en")
+    ? "en"
+    : i18n.resolvedLanguage?.startsWith("az")
+      ? "az"
+      : i18n.language?.startsWith("en")
+        ? "en"
+        : "az";
+
+  const changeLanguage = (language) => {
+    if (language !== currentLanguage) {
+      i18n.changeLanguage(language);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -587,11 +653,17 @@ function Sidebar() {
     navigate("/login", { replace: true });
   };
 
-  const displayName = user?.name || user?.fullName || "Administrator";
-  const displayRole = user?.role || "Admin";
+  const displayName =
+    user?.name || user?.fullName || "Administrator";
+
+  const displayRole =
+    user?.role || "Admin";
 
   const avatarLetter = (
-    user?.name || user?.fullName || user?.email || "A"
+    user?.name ||
+    user?.fullName ||
+    user?.email ||
+    "A"
   ).charAt(0).toUpperCase();
 
   return (
@@ -610,8 +682,33 @@ function Sidebar() {
 
         <div className="sidebar-divider" />
 
+        <div className="sidebar-language">
+          <span className="language-label">
+            <Languages size={16} />
+            {t("language")}
+          </span>
+
+          <div className="language-buttons">
+            {["az", "en"].map((language) => (
+              <button
+                key={language}
+                type="button"
+                onClick={() => changeLanguage(language)}
+                aria-pressed={currentLanguage === language}
+                className={`language-button ${
+                  currentLanguage === language ? "active" : ""
+                }`}
+              >
+                {language.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <nav className="sidebar-nav">
-          <p className="sidebar-title">WORKSPACE</p>
+          <p className="sidebar-title">
+            {t("workspace")}
+          </p>
 
           {menuItems.map((item) => {
             const Icon = item.icon;
@@ -630,7 +727,7 @@ function Sidebar() {
                 </span>
 
                 <span className="sidebar-link-label">
-                  {item.label}
+                  {t(item.label)}
                 </span>
 
                 <ArrowRight
@@ -649,17 +746,22 @@ function Sidebar() {
             </span>
 
             <div>
-              <strong>Secure workspace</strong>
-              <span>Admin access enabled</span>
+              <strong>{t("secureWorkspace")}</strong>
+              <span>{t("adminAccessEnabled")}</span>
             </div>
           </div>
 
           <div className="sidebar-footer">
             <div className="admin-user">
-              <div className="admin-avatar">{avatarLetter}</div>
+              <div className="admin-avatar">
+                {avatarLetter}
+              </div>
 
               <div className="admin-user-info">
-                <strong title={displayName}>{displayName}</strong>
+                <strong title={displayName}>
+                  {displayName}
+                </strong>
+
                 <span>
                   <i className="admin-online-dot" />
                   {displayRole}
@@ -681,11 +783,14 @@ function Sidebar() {
               </span>
 
               <span className="logout-text">
-                <strong>Sign out</strong>
-                <small>Log out of your account</small>
+                <strong>{t("signOut")}</strong>
+                <small>{t("logoutDescription")}</small>
               </span>
 
-              <ArrowRight className="logout-arrow" size={15} />
+              <ArrowRight
+                className="logout-arrow"
+                size={15}
+              />
             </button>
           </div>
 
@@ -715,7 +820,7 @@ function Sidebar() {
               type="button"
               className="logout-modal-close"
               onClick={() => setConfirmLogout(false)}
-              aria-label="Close"
+              aria-label={t("closeMenu")}
             >
               <X size={18} />
             </button>
@@ -725,14 +830,14 @@ function Sidebar() {
             </div>
 
             <span className="logout-modal-eyebrow">
-              SESSION MANAGEMENT
+              {t("sessionManagement")}
             </span>
 
-            <h2 id="logout-modal-title">Sign out?</h2>
+            <h2 id="logout-modal-title">
+              {t("confirmLogoutTitle")}
+            </h2>
 
-            <p>
-              Are you sure you want to sign out of your Hospital admin account?
-            </p>
+            <p>{t("confirmLogoutMessage")}</p>
 
             <div className="logout-modal-actions">
               <button
@@ -740,7 +845,7 @@ function Sidebar() {
                 className="logout-cancel-btn"
                 onClick={() => setConfirmLogout(false)}
               >
-                Cancel
+                {t("cancel")}
               </button>
 
               <button
@@ -749,7 +854,7 @@ function Sidebar() {
                 onClick={handleLogout}
               >
                 <LogOut size={16} />
-                Sign out
+                {t("signOut")}
               </button>
             </div>
           </section>

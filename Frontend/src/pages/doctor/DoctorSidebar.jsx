@@ -1,6 +1,7 @@
 
 import { useContext, useState, useEffect, useCallback } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   LayoutDashboard,
   CalendarDays,
@@ -22,52 +23,110 @@ import api from "../../services/api";
 
 const menuItems = [
   {
+    key: "dashboard",
     label: "Dashboard",
     path: "/doctor",
     icon: LayoutDashboard,
     end: true,
   },
   {
+    key: "appointments",
     label: "Appointments",
     path: "/doctor/appointments",
     icon: CalendarDays,
   },
   {
+    key: "patients",
     label: "Patients",
     path: "/doctor/patients",
     icon: Users,
   },
   {
+    key: "medicalRecords",
     label: "Medical Records",
     path: "/doctor/medical-records",
     icon: ClipboardList,
   },
   {
+    key: "prescriptions",
     label: "Prescriptions",
     path: "/doctor/prescriptions",
     icon: FileText,
   },
   {
+    key: "reviews",
     label: "Reviews",
     path: "/doctor/ratings",
     icon: Star,
   },
   {
+    key: "schedule",
     label: "Schedule",
     path: "/doctor/schedule",
     icon: Clock,
   },
   {
+    key: "absenceRequests",
     label: "Absence Requests",
     path: "/doctor/absence-requests",
     icon: CalendarX,
   },
   {
+    key: "profile",
     label: "Profile",
     path: "/doctor/profile",
     icon: UserRound,
   },
 ];
+
+const translations = {
+  az: {
+    language: "Dil",
+    workspaceTitle: "HƏKİM PANELİ",
+    dashboard: "İdarə paneli",
+    appointments: "Qəbullar",
+    patients: "Pasiyentlər",
+    medicalRecords: "Tibbi qeydlər",
+    prescriptions: "Reseptlər",
+    reviews: "Rəylər",
+    schedule: "İş qrafiki",
+    absenceRequests: "İşdə olmama sorğuları",
+    profile: "Profil",
+    doctorWorkspace: "Həkim paneli",
+    medicalPortal: "Tibb portalı",
+    doctorAccount: "Həkim hesabı",
+    signOut: "Çıxış",
+    signOutTitle: "Hesabdan çıxılsın?",
+    signOutMessage:
+      "Həkim hesabınızdan çıxmaq istədiyinizə əminsiniz?",
+    cancel: "Ləğv et",
+    close: "Bağla",
+    pendingAppointments: "gözləyən qəbul",
+  },
+  en: {
+    language: "Language",
+    workspaceTitle: "DOCTOR WORKSPACE",
+    dashboard: "Dashboard",
+    appointments: "Appointments",
+    patients: "Patients",
+    medicalRecords: "Medical Records",
+    prescriptions: "Prescriptions",
+    reviews: "Reviews",
+    schedule: "Schedule",
+    absenceRequests: "Absence Requests",
+    profile: "Profile",
+    doctorWorkspace: "Doctor Workspace",
+    medicalPortal: "Medical portal",
+    doctorAccount: "Doctor account",
+    signOut: "Sign out",
+    signOutTitle: "Sign out?",
+    signOutMessage:
+      "Are you sure you want to sign out of your doctor account?",
+    cancel: "Cancel",
+    close: "Close",
+    pendingAppointments: "pending appointments",
+  },
+};
 
 const styles = `
 .doctor-sidebar,
@@ -100,10 +159,7 @@ const styles = `
   scrollbar-color: #34445f transparent;
 }
 
-.doctor-sidebar::-webkit-scrollbar {
-  width: 4px;
-}
-
+.doctor-sidebar::-webkit-scrollbar { width: 4px; }
 .doctor-sidebar::-webkit-scrollbar-thumb {
   background: #34445f;
   border-radius: 10px;
@@ -148,12 +204,51 @@ const styles = `
 .doctor-sidebar .ds-divider {
   height: 1px;
   flex-shrink: 0;
-  margin: 0 5px 22px;
+  margin: 0 5px 15px;
   background: linear-gradient(
     90deg,
     rgba(148, 163, 184, 0.22),
     rgba(148, 163, 184, 0.03)
   );
+}
+
+.doctor-sidebar .ds-language {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 5px;
+  margin: 0 0 20px;
+  color: #91a3bd;
+  font-size: 11px;
+}
+
+.doctor-sidebar .ds-language-buttons {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.doctor-sidebar .ds-language-button {
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #a8b8d0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.doctor-sidebar .ds-language-button:hover { color: #fff; }
+
+.doctor-sidebar .ds-language-button.active {
+  color: #fff;
+  border-color: rgba(103, 155, 255, 0.3);
+  background: #3159d9;
 }
 
 .doctor-sidebar .ds-title {
@@ -184,11 +279,8 @@ const styles = `
   letter-spacing: 0.05px;
   border: 1px solid transparent;
   border-radius: 11px;
-  transition:
-    color 0.2s ease,
-    background 0.2s ease,
-    border-color 0.2s ease,
-    transform 0.2s ease;
+  transition: color 0.2s ease, background 0.2s ease,
+    border-color 0.2s ease, transform 0.2s ease;
 }
 
 .doctor-sidebar .ds-link:hover {
@@ -261,14 +353,8 @@ const styles = `
 }
 
 @keyframes ds-badge-appear {
-  from {
-    opacity: 0;
-    transform: scale(0.7);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+  from { opacity: 0; transform: scale(0.7); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .doctor-sidebar .ds-bottom {
@@ -438,14 +524,8 @@ const styles = `
 }
 
 @keyframes ds-modal-enter {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .ds-modal-close {
@@ -512,9 +592,7 @@ const styles = `
   background: #ffffff;
 }
 
-.ds-cancel:hover {
-  background: #f5f7fb;
-}
+.ds-cancel:hover { background: #f5f7fb; }
 
 .ds-confirm {
   color: #ffffff;
@@ -522,9 +600,7 @@ const styles = `
   background: #dc4c4c;
 }
 
-.ds-confirm:hover {
-  background: #c93636;
-}
+.ds-confirm:hover { background: #c93636; }
 
 @media (max-width: 850px) {
   .doctor-sidebar {
@@ -536,38 +612,14 @@ const styles = `
 }
 
 @media (max-height: 790px) {
-  .doctor-sidebar {
-    padding-top: 11px;
-  }
-
-  .doctor-sidebar .ds-brand {
-    padding-bottom: 13px;
-  }
-
-  .doctor-sidebar .ds-divider {
-    margin-bottom: 13px;
-  }
-
-  .doctor-sidebar .ds-link {
-    min-height: 38px;
-  }
-
-  .doctor-sidebar .ds-nav {
-    gap: 3px;
-  }
-
-  .doctor-sidebar .ds-bottom {
-    padding-top: 12px;
-  }
-
-  .doctor-sidebar .ds-status {
-    padding: 8px;
-    margin-bottom: 8px;
-  }
-
-  .doctor-sidebar .ds-user {
-    padding: 9px;
-  }
+  .doctor-sidebar { padding-top: 11px; }
+  .doctor-sidebar .ds-brand { padding-bottom: 13px; }
+  .doctor-sidebar .ds-divider { margin-bottom: 13px; }
+  .doctor-sidebar .ds-link { min-height: 38px; }
+  .doctor-sidebar .ds-nav { gap: 3px; }
+  .doctor-sidebar .ds-bottom { padding-top: 12px; }
+  .doctor-sidebar .ds-status { padding: 8px; margin-bottom: 8px; }
+  .doctor-sidebar .ds-user { padding: 9px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -582,9 +634,24 @@ const styles = `
 export default function DoctorSidebar() {
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
+  const { i18n } = useTranslation();
 
   const [showLogout, setShowLogout] = useState(false);
   const [pendingAppointments, setPendingAppointments] = useState(0);
+
+  const currentLanguage = (
+    i18n.resolvedLanguage || i18n.language || "az"
+  ).toLowerCase().startsWith("en")
+    ? "en"
+    : "az";
+
+  const t = (key) => translations[currentLanguage][key] || key;
+
+  const changeLanguage = (language) => {
+    if (language !== currentLanguage) {
+      i18n.changeLanguage(language);
+    }
+  };
 
   const name =
     user?.fullName ||
@@ -615,7 +682,6 @@ export default function DoctorSidebar() {
 
       const count = appointments.filter((appointment) => {
         const status = appointment?.status ?? appointment?.Status;
-
         return String(status || "").toLowerCase() === "pending";
       }).length;
 
@@ -636,9 +702,7 @@ export default function DoctorSidebar() {
       30000
     );
 
-    const handleFocus = () => {
-      loadPendingAppointments();
-    };
+    const handleFocus = () => loadPendingAppointments();
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
@@ -686,9 +750,36 @@ export default function DoctorSidebar() {
 
         <div className="ds-divider" />
 
-        <p className="ds-title">DOCTOR WORKSPACE</p>
+        <div className="ds-language">
+          <span>{t("language")}</span>
 
-        <nav className="ds-nav" aria-label="Doctor navigation">
+          <div className="ds-language-buttons">
+            {["az", "en"].map((language) => (
+              <button
+                key={language}
+                type="button"
+                className={`ds-language-button ${
+                  currentLanguage === language ? "active" : ""
+                }`}
+                onClick={() => changeLanguage(language)}
+                aria-pressed={currentLanguage === language}
+              >
+                {language.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <p className="ds-title">{t("workspaceTitle")}</p>
+
+        <nav
+          className="ds-nav"
+          aria-label={
+            currentLanguage === "az"
+              ? "Həkim menyusu"
+              : "Doctor navigation"
+          }
+        >
           {menuItems.map((item) => {
             const Icon = item.icon;
 
@@ -705,14 +796,20 @@ export default function DoctorSidebar() {
                   <Icon size={19} strokeWidth={1.8} />
                 </span>
 
-                <span className="ds-link-label">{item.label}</span>
+                <span className="ds-link-label">
+                  {t(item.key)}
+                </span>
 
                 {item.path === "/doctor/appointments" &&
                   pendingAppointments > 0 && (
                     <span
                       className="ds-appointment-badge"
-                      aria-label={`${pendingAppointments} pending appointments`}
-                      title={`${pendingAppointments} gözləyən rezervasiya`}
+                      aria-label={`${pendingAppointments} ${t(
+                        "pendingAppointments"
+                      )}`}
+                      title={`${pendingAppointments} ${t(
+                        "pendingAppointments"
+                      )}`}
                     >
                       {pendingAppointments > 99
                         ? "99+"
@@ -737,10 +834,10 @@ export default function DoctorSidebar() {
             </span>
 
             <div>
-              <strong>Doctor Workspace</strong>
+              <strong>{t("doctorWorkspace")}</strong>
               <small>
                 <span className="ds-online-dot" />
-                Medical portal
+                {t("medicalPortal")}
               </small>
             </div>
           </div>
@@ -750,7 +847,7 @@ export default function DoctorSidebar() {
 
             <div className="ds-user-info">
               <strong title={name}>{name}</strong>
-              <span>Doctor account</span>
+              <span>{t("doctorAccount")}</span>
             </div>
           </div>
 
@@ -760,7 +857,7 @@ export default function DoctorSidebar() {
             onClick={() => setShowLogout(true)}
           >
             <LogOut size={16} />
-            Sign out
+            {t("signOut")}
           </button>
 
           <div className="ds-version">
@@ -789,7 +886,7 @@ export default function DoctorSidebar() {
               className="ds-modal-close"
               type="button"
               onClick={() => setShowLogout(false)}
-              aria-label="Close"
+              aria-label={t("close")}
             >
               <X size={17} />
             </button>
@@ -798,11 +895,9 @@ export default function DoctorSidebar() {
               <LogOut size={23} />
             </div>
 
-            <h2 id="ds-modal-title">Sign out?</h2>
+            <h2 id="ds-modal-title">{t("signOutTitle")}</h2>
 
-            <p>
-              Are you sure you want to sign out of your doctor account?
-            </p>
+            <p>{t("signOutMessage")}</p>
 
             <div className="ds-modal-actions">
               <button
@@ -810,7 +905,7 @@ export default function DoctorSidebar() {
                 type="button"
                 onClick={() => setShowLogout(false)}
               >
-                Cancel
+                {t("cancel")}
               </button>
 
               <button
@@ -818,7 +913,7 @@ export default function DoctorSidebar() {
                 type="button"
                 onClick={handleLogout}
               >
-                Sign out
+                {t("signOut")}
               </button>
             </div>
           </section>
