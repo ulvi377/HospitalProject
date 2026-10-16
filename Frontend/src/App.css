@@ -338,7 +338,6 @@
 
 .admin-main {
   width: calc(100% - 260px);
-  margin-left: 260px;
   min-height: 100vh;
   padding: 32px;
 }
